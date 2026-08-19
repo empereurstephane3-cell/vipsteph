@@ -14,7 +14,7 @@ st.title("VIP Steph - Prévisions Football en Direct ⚽")
 # --- CONFIGURATION API-FOOTBALL (DIRECT) ---
 # --- CONFIGURATION API-FOOTBALL ---
 try:
-    API_KEY = st.secrets["API_KEY"]
+    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
     st.sidebar.success("🔑 Clé secrète détectée !")
 except KeyError:
     st.sidebar.error("❌ Erreur : Le nom 'API_KEY' est introuvable dans tes secrets.")
