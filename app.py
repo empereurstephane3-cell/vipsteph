@@ -238,7 +238,9 @@ lam_h_1h, lam_a_1h = lam_h * 0.43, lam_a * 0.43
 best_p_1h = -1
 score_1h = "0-0"
 for h in range(4):
-for a in range(4):
+    for a in range(4):
+        # Remplace par ton code intérieur habituel si besoin, par exemple :
+        # p = poisson(h, lambda_home) * poisson(a, lambda_away):
 p = poisson(h, lam_h_1h) * poisson(a, lam_a_1h)
 if p > best_p_1h:
 best_p_1h = p
