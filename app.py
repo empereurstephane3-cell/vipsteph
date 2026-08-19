@@ -207,16 +207,11 @@ lambda_home = home_att * away_def * league_avg * home_adv
 lambda_away = away_att * home_def * league_avg / home_adv
 def poisson(k, lam): return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k)
     
-scores_full = [] 
-p_home, p_draw, p_away = 0.0, 0.0, 0.0
-p_over, p_under = 0.0, 0.0
-p_btts_yes, p_btts_no = 0.0, 0.0
-    
-for h in range(7):
-for a in range(7):
-p = poisson(h, lam_h) * poisson(a, lam_a)
-# Correction mineure de corrélation pour les scores serrés (Dixon-Coles style approximation)
-if h == 0 and a == 0: p *= 1.05
+scores_full = []
+for h in range(max_goals + 1):
+    for a in range(7):
+        p = poisson(h, lambda_home) * poisson(a, lambda_away)
+        scores_full.append({"score": f"{h}-{a}", "prob": p})
              
 scores_full.append({"score": f"{h}-{a}", "prob": p * 100})
 if h > a: p_home += p
