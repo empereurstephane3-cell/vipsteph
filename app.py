@@ -185,12 +185,14 @@ def render_poisson_metrics(stats):
 # --- CORRECTION DÉBUT DE SAISON (PONDÉRATION) ---
         # On ajoute un poids de 5 matchs "fantômes" basés sur la moyenne de la ligue
         # Cela stabilise les stats tant que le nombre de matchs joués est faible  
-PRIOR_WEIGHT = 5        
-        # Fonction pour lisser les performances (Régression vers la moyenne)
+PRIOR_WEIGHT = 5
+
+
 def smooth(goals, games, league_avg):
-            return (goals + (league_avg * PRIOR_WEIGHT)) / (games + PRIOR_WEIGHT)
-        # Application du lissage
-        smooth_home_gf = smooth(h_data['home_gf'], h_data['home_played'], league_avg)
+  return (goals + PRIOR_WEIGHT * league_avg) / (games + PRIOR_WEIGHT)
+
+
+smooth_home_gf = smooth(h_data["home_gf"], h_data["home_played"], league_avg)
         smooth_home_ga = smooth(h_data['home_ga'], h_data['home_played'], league_avg)
         smooth_away_gf = smooth(a_data['away_gf'], a_data['away_played'], league_avg)
         smooth_away_ga = smooth(a_data['away_ga'], a_data['away_played'], league_avg)
