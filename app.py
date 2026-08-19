@@ -10,17 +10,31 @@ st.set_page_config(
 st.title("VIP Steph - Prévisions Football en Direct ⚽")
 
 # --- CONFIGURATION API-FOOTBALL ---
-# --- CONFIGURATION API-FOOTBALL ---
-# --- CONFIGURATION API-FOOTBALL (DIRECT) ---
-# --- CONFIGURATION API-FOOTBALL ---
+# --- CONFIGURATION API-FOOTBALL (DIAGNOSTIC SÉCURISÉ) ---
 try:
-    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
-    st.sidebar.success("🔑 Clé secrète détectée !")
-except KeyError:
-    st.sidebar.error("❌ Erreur : Le nom 'API_KEY' est introuvable dans tes secrets.")
-    API_KEY = "ERREUR"
+    # On regarde si des secrets existent
+    if len(st.secrets) > 0:
+        # Affiche toutes les clés présentes dans tes secrets pour qu'on voie le nom exact
+        keys_disponibles = list(st.secrets.keys())
+        st.sidebar.info(f"Clés dans Streamlit : {keys_disponibles}")
+        
+        # On cherche dynamiquement la bonne clé peu importe les majuscules
+        API_KEY = None
+        for k in keys_disponibles:
+            if "api" in k.lower() and "key" in k.lower():
+                API_KEY = st.secrets[k]
+                break
+                
+        if API_KEY:
+            st.sidebar.success("🔑 Clé récupérée avec succès !")
+        else:
+            st.sidebar.error("❌ Aucune clé 'API' trouvée dans tes secrets.")
+            API_KEY = "ERREUR"
+    else:
+        st.sidebar.error("❌ Le coffre des secrets est complètement vide.")
+        API_KEY = "ERREUR"
 except Exception as e:
-    st.sidebar.error(f"❌ Erreur générale : {e}")
+    st.sidebar.error(f"❌ Erreur : {e}")
     API_KEY = "ERREUR"
 
 URL_API = "https://v3.football.api-sports.io/fixtures"
