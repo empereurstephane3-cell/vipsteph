@@ -71,7 +71,7 @@ def get_fixtures(date_target):
 fixtures = get_fixtures(date_str)
 
 if not fixtures and API_KEY == "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e":
-    st.warning(
+     # st.warning(
         "⚠️ Pense à insérer ta clé API-Football dans le code pour récupérer"
         " les vrais matchs en direct !"
     )
