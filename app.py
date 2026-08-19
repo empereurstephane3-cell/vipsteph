@@ -12,9 +12,11 @@ st.title("VIP Steph - Prévisions Football en Direct ⚽")
 # --- CONFIGURATION API-FOOTBALL ---
 # --- CONFIGURATION API-FOOTBALL ---
 try:
-    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
-except:
-    API_KEY = "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"
+    API_KEY = st.secrets["API_KEY"]
+    st.sidebar.success("🔑 Clé secrète détectée !")
+except Exception as e:
+    API_KEY = "TA_CLE_RAPIDAPI_ICI"
+    st.sidebar.warning("⚠️ Clé secrète non trouvée (Mode secours)")
 
 HEADERS = {
     "x-rapidapi-key": API_KEY,
