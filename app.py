@@ -201,38 +201,36 @@ home_att = smooth_home_gf / league_avg
 home_def = smooth_home_ga / league_avg
 away_att = smooth_away_gf / league_avg
 away_def = smooth_away_ga / league_avg
-        
-        # Facteur domicile standardisé
-        home_adv = 1.20
-        lam_h = max(0.4, min(3.8, home_att * away_def * league_avg * home_adv))
-        lam_a = max(0.3, min(3.2, away_att * home_def * league_avg)))
 
-    def poisson(k, lam): return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k)
+home_adv = 1.20
+lambda_home = home_att * away_def * league_avg * home_adv
+lambda_away = away_att * home_def * league_avg / home_adv
+ def poisson(k, lam): return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k)
     
-    scores_full = []
-    p_home, p_draw, p_away = 0.0, 0.0, 0.0
-    p_over, p_under = 0.0, 0.0
-    p_btts_yes, p_btts_no = 0.0, 0.0
+ scores_full = []
+ p_home, p_draw, p_away = 0.0, 0.0, 0.0
+ p_over, p_under = 0.0, 0.0
+ p_btts_yes, p_btts_no = 0.0, 0.0
     
-    for h in range(7):
-        for a in range(7):
-            p = poisson(h, lam_h) * poisson(a, lam_a)
-            # Correction mineure de corrélation pour les scores serrés (Dixon-Coles style approximation)
-            if h == 0 and a == 0: p *= 1.05
+ for h in range(7):
+ for a in range(7):
+ p = poisson(h, lam_h) * poisson(a, lam_a)
+ # Correction mineure de corrélation pour les scores serrés (Dixon-Coles style approximation)
+ if h == 0 and a == 0: p *= 1.05
             
-            scores_full.append({"score": f"{h}-{a}", "prob": p * 100})
-            if h > a: p_home += p
-            elif h == a: p_draw += p
-            else: p_away += p
+ scores_full.append({"score": f"{h}-{a}", "prob": p * 100})
+ if h > a: p_home += p
+ elif h == a: p_draw += p
+ else: p_away += p
             
-            if (h + a) > 2.5: p_over += p
-            else: p_under += p
+ if (h + a) > 2.5: p_over += p
+ else: p_under += p
             
-            if h > 0 and a > 0: p_btts_yes += p
-            else: p_btts_no += p
+ if h > 0 and a > 0: p_btts_yes += p
+ else: p_btts_no += p
             
-    total = p_home + p_draw + p_away
-    if total > 0:
+ total = p_home + p_draw + p_away
+ if total > 0:
         p_home, p_draw, p_away = (p_home/total)*100, (p_draw/total)*100, (p_away/total)*100
         p_over, p_under = (p_over/total)*100, (p_under/total)*100
         p_btts_yes, p_btts_no = (p_btts_yes/total)*100, (p_btts_no/total)*100
