@@ -12,6 +12,10 @@ st.set_page_config(
 
 st.title("VIP Steph - Prévisions IA Multi-Agents ⚽🤖")
 
+# --- GESTION DE L'ÉTAT POUR LE CHANGEMENT DE DATE ---
+if 'last_date' not in st.session_state:
+    st.session_state.last_date = datetime.now().date()
+
 # --- CONFIGURATION API-FOOTBALL ---
 API_KEY = None
 try:
@@ -27,9 +31,14 @@ HEADERS = {
 
 # --- BARRE LATÉRALE : PARAMÈTRES & FILTRES ---
 st.sidebar.header("📅 Paramètres & Matchs")
-date_target = st.sidebar.date_input("Date des matchs", value=datetime.now().date())
-date_str = date_target.strftime("%Y-%m-%d")
+date_target = st.sidebar.date_input("Date des matchs", value=st.session_state.last_date)
 
+# SI LA DATE CHANGE : Actualisation automatique pour effacer l'ancienne sélection
+if date_target != st.session_state.last_date:
+    st.session_state.last_date = date_target
+    st.rerun()
+
+date_str = date_target.strftime("%Y-%m-%d")
 top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe & Monde)", value=True)
 
 # IDs des championnats majeurs (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, LDC, etc.)
@@ -56,31 +65,22 @@ if top_leagues_only and matches:
 
 # --- MOTEUR DES 8 AGENTS IA POUR UNE FIABILITÉ MAXIMALE ---
 def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0):
-    # Utilisation d'une graine stable basée sur les noms pour la cohérence des calculs
     seed_val = sum(ord(c) for c in h_team + a_team)
     random.seed(seed_val)
     
-    # 1. Agent Forme & 2. Agent xG
     score_h = max(current_h_goals, random.choice([1, 2, 2, 3]))
     score_a = max(current_a_goals, random.choice([0, 1, 1, 2]))
     total_goals = score_h + score_a
-    
-    # 3. Agent Corners
     total_corners = random.randint(8, 14)
     
-    # 4. Agent Tactique 1ère MT
     ht_1n2 = random.choice(["1 (Avantage Domicile)", "N (Match Nul à la pause)", "2 (Avantage Extérieur)"])
     ht_goals = random.choice(["+0.5 but validé", "+1.5 buts offensif"])
     ht_shots = random.randint(4, 9)
     ht_corners = random.randint(3, 6)
     
-    # 5. & 6. Agents Défense & Venue
     defensive_reliability = "Bloc solide attendu" if total_goals < 3 else "Jeu ouvert / Failles défensives"
-    
-    # 7. Agent Momentum (Ajustement dynamique)
     match_tempo = "Intensité élevée en seconde période" if random.random() > 0.3 else "Gestion du score en fin de match"
     
-    # 8. Agent Validation & Confiance (Consensus global des 8 agents)
     conf_score = random.randint(82, 96)
     conf_goals = random.randint(85, 98)
     conf_corners = random.randint(80, 93)
