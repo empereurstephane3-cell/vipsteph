@@ -10,8 +10,12 @@ st.set_page_config(
 st.title("VIP Steph - Prévisions Football en Direct ⚽")
 
 # --- CONFIGURATION API-FOOTBALL ---
-# Remplace par ta clé RapidAPI et ton host si nécessaire
-API_KEY = "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"
+# --- CONFIGURATION API-FOOTBALL ---
+try:
+    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
+except:
+    API_KEY = "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"
+
 HEADERS = {
     "x-rapidapi-key": API_KEY,
     "x-rapidapi-host": "api-football-v1.p.rapidapi.com",
