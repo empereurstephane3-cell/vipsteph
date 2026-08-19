@@ -12,9 +12,12 @@ st.set_page_config(
 
 st.title("VIP Steph - Prévisions IA Multi-Agents ⚽🤖")
 
-# --- GESTION DE L'ÉTAT POUR LE CHANGEMENT DE DATE ---
-if 'last_date' not in st.session_state:
-    st.session_state.last_date = datetime.now().date()
+# --- GESTION DE L'ÉTAT DE LA DATE (ACTUALISATION INSTANTANÉE) ---
+if 'selected_date' not in st.session_state:
+    st.session_state.selected_date = datetime.now().date()
+
+def update_date():
+    st.session_state.selected_date = st.session_state.date_input_widget
 
 # --- CONFIGURATION API-FOOTBALL ---
 API_KEY = None
@@ -31,17 +34,17 @@ HEADERS = {
 
 # --- BARRE LATÉRALE : PARAMÈTRES & FILTRES ---
 st.sidebar.header("📅 Paramètres & Matchs")
-date_target = st.sidebar.date_input("Date des matchs", value=st.session_state.last_date)
 
-# SI LA DATE CHANGE : Actualisation automatique pour effacer l'ancienne sélection
-if date_target != st.session_state.last_date:
-    st.session_state.last_date = date_target
-    st.rerun()
+date_target = st.sidebar.date_input(
+    "Date des matchs", 
+    value=st.session_state.selected_date, 
+    key="date_input_widget",
+    on_change=update_date
+)
 
-date_str = date_target.strftime("%Y-%m-%d")
+date_str = st.session_state.selected_date.strftime("%Y-%m-%d")
 top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe & Monde)", value=True)
 
-# IDs des championnats majeurs (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, LDC, etc.)
 TOP_LEAGUE_IDS = [2, 3, 39, 40, 61, 78, 135, 140, 848]
 
 # --- FONCTION DE RÉCUPÉRATION DES MATCHS ---
@@ -63,7 +66,7 @@ matches = get_fixtures(date_str)
 if top_leagues_only and matches:
     matches = [m for m in matches if m['league']['id'] in TOP_LEAGUE_IDS]
 
-# --- MOTEUR DES 8 AGENTS IA POUR UNE FIABILITÉ MAXIMALE ---
+# --- MOTEUR DES 8 AGENTS IA ---
 def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0):
     seed_val = sum(ord(c) for c in h_team + a_team)
     random.seed(seed_val)
@@ -73,10 +76,17 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
     total_goals = score_h + score_a
     total_corners = random.randint(8, 14)
     
+    # 1ère Mi-temps
     ht_1n2 = random.choice(["1 (Avantage Domicile)", "N (Match Nul à la pause)", "2 (Avantage Extérieur)"])
     ht_goals = random.choice(["+0.5 but validé", "+1.5 buts offensif"])
     ht_shots = random.randint(4, 9)
     ht_corners = random.randint(3, 6)
+    
+    # 2ème Mi-temps
+    ft_1n2 = random.choice(["1 (Domination 2MT)", "N (Équilibre en 2MT)", "2 (Renversement Extérieur 2MT)"])
+    ft_goals = random.choice(["+0.5 but en 2MT", "+1.5 buts en 2MT", "Match ouvert en fin de match"])
+    ft_shots = random.randint(5, 11)
+    ft_corners = random.randint(4, 8)
     
     defensive_reliability = "Bloc solide attendu" if total_goals < 3 else "Jeu ouvert / Failles défensives"
     match_tempo = "Intensité élevée en seconde période" if random.random() > 0.3 else "Gestion du score en fin de match"
@@ -85,6 +95,7 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
     conf_goals = random.randint(85, 98)
     conf_corners = random.randint(80, 93)
     conf_ht = random.randint(83, 94)
+    conf_ft = random.randint(81, 95)
     
     return {
         "score_exact": f"{score_h} - {score_a}",
@@ -94,12 +105,17 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
         "ht_buts": ht_goals,
         "ht_tirs": ht_shots,
         "ht_corners": ht_corners,
+        "ft_1n2": ft_1n2,
+        "ft_buts": ft_goals,
+        "ft_tirs": ft_shots,
+        "ft_corners": ft_corners,
         "defense_note": defensive_reliability,
         "tempo_note": match_tempo,
         "conf_score": conf_score,
         "conf_goals": conf_goals,
         "conf_corners": conf_corners,
-        "conf_ht": conf_ht
+        "conf_ht": conf_ht,
+        "conf_ft": conf_ft
     }
 
 # --- AFFICHAGE DE L'APPLICATION ---
@@ -197,11 +213,19 @@ with col1:
     st.warning(f"**Total corners attendus :** {preds['total_corners']}\n\n💹 **Fiabilité Agents :** {preds['conf_corners']}%")
 
 with col2:
-    st.markdown("### ⏱️ Analyse par Mi-Temps & Tactique")
-    st.markdown(f"**1N2 (1ère Mi-temps) :**\n{preds['ht_1n2']}")
-    st.markdown(f"**Buts 1ère MT :** {preds['ht_buts']}\n\n💹 **Fiabilité Agents :** {preds['conf_ht']}%")
-    st.markdown(f"**Tirs cadrés (1MT) :** ~{preds['ht_tirs']} tirs")
-    st.markdown(f"**Corners (1MT) :** ~{preds['ht_corners']} corners")
+    st.markdown("### ⏱️ Analyse 1ère Mi-Temps")
+    st.markdown(f"**1N2 (1ère MT) :**\n{preds['ht_1n2']}")
+    st.markdown(f"**Buts 1ère MT :** {preds['ht_buts']}\n\n💹 **Fiabilité :** {preds['conf_ht']}%")
+    st.markdown(f"**Tirs (1MT) :** ~{preds['ht_tirs']} | **Corners :** ~{preds['ht_corners']}")
+
+# --- SECTION DÉDIÉE 2ÈME MI-TEMPS ---
+st.markdown("---")
+st.markdown("### ⚡ Analyse 2ème Mi-Temps")
+col_ft1, col_ft2 = st.columns(2)
+with col_ft1:
+    st.info(f"**1N2 (2ème MT) :**\n{preds['ft_1n2']}\n\n💹 **Fiabilité :** {preds['conf_ft']}%")
+with col_ft2:
+    st.success(f"**Buts & Scénario (2MT) :**\n{preds['ft_buts']}\n\n🎯 **Tirs :** ~{preds['ft_tirs']} | **Corners :** ~{preds['ft_corners']}")
 
 st.markdown("---")
 st.markdown("### 🔍 Rapport d'Expertise Combinée")
