@@ -184,9 +184,8 @@ def render_poisson_metrics(stats):
 # --- LOI DE POISSON ULTRA-ROBUSTE & FIABILITÉ MAXIMALE ---
 # --- CORRECTION DÉBUT DE SAISON (PONDÉRATION) ---
         # On ajoute un poids de 5 matchs "fantômes" basés sur la moyenne de la ligue
-        # Cela stabilise les stats tant que le nombre de matchs joués est faible
-        PRIOR_WEIGHT = 5 
-        
+        # Cela stabilise les stats tant que le nombre de matchs joués est faible  
+PRIOR_WEIGHT = 5        
         # Fonction pour lisser les performances (Régression vers la moyenne)
         def smooth(goals, games, league_avg):
             return (goals + (league_avg * PRIOR_WEIGHT)) / (games + PRIOR_WEIGHT)
