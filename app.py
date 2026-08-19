@@ -11,16 +11,18 @@ st.title("VIP Steph - Prévisions Football en Direct ⚽")
 
 # --- CONFIGURATION API-FOOTBALL ---
 # --- CONFIGURATION API-FOOTBALL ---
+# --- CONFIGURATION API-FOOTBALL (DIRECT) ---
 try:
-    API_KEY = st.secrets["API_KEY"]
+    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
     st.sidebar.success("🔑 Clé secrète détectée !")
-except Exception as e:
-    API_KEY = "TA_CLE_RAPIDAPI_ICI"
-    st.sidebar.warning("⚠️ Clé secrète non trouvée (Mode secours)")
+except:
+    API_KEY = "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"
+    st.sidebar.warning("⚠️ Clé non trouvée")
 
+# URL et Header officiels d'API-Sports
+URL_API = "https://v3.football.api-sports.io/fixtures"
 HEADERS = {
-    "x-rapidapi-key": API_KEY,
-    "x-rapidapi-host": "api-football-v1.p.rapidapi.com",
+    "x-apisports-key": API_KEY,
 }
 
 # Date du jour dynamique
@@ -32,13 +34,12 @@ date_str = selected_date.strftime("%Y-%m-%d")
 
 # Fonction pour récupérer les matchs du jour via l'API
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)
 def get_fixtures(date_target):
-    url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures?date={date_target}"
+    url = f"{URL_API}?date={date_target}"
     try:
         response = requests.get(url, headers=HEADERS)
-        # Affichage du statut pour diagnostiquer
         st.sidebar.write(f"API Status: {response.status_code}")
-        
         if response.status_code == 200:
             return response.json().get("response", [])
         else:
