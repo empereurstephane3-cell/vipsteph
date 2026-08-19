@@ -205,7 +205,7 @@ away_def = smooth_away_ga / league_avg
 home_adv = 1.20
 lambda_home = home_att * away_def * league_avg * home_adv
 lambda_away = away_att * home_def * league_avg / home_adv
- def poisson(k, lam): return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k)
+def poisson(k, lam): return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k)
     
  scores_full = []
  p_home, p_draw, p_away = 0.0, 0.0, 0.0
@@ -230,79 +230,79 @@ lambda_away = away_att * home_def * league_avg / home_adv
  else: p_btts_no += p
             
  total = p_home + p_draw + p_away
- if total > 0:
-        p_home, p_draw, p_away = (p_home/total)*100, (p_draw/total)*100, (p_away/total)*100
-        p_over, p_under = (p_over/total)*100, (p_under/total)*100
-        p_btts_yes, p_btts_no = (p_btts_yes/total)*100, (p_btts_no/total)*100
+ if total > 0: p_home, p_draw, p_away = (p_home/total)*100, (p_draw/total)*100, (p_away/total)*100      
+ p_home, p_draw, p_away = (p_home/total)*100, (p_draw/total)*100, (p_away/total)*100    
+ p_over, p_under = (p_over/total)*100, (p_under/total)*100
+ p_btts_yes, p_btts_no = (p_btts_yes/total)*100, (p_btts_no/total)*100
     
-    p_1x = p_home + p_draw
-    p_x2 = p_draw + p_away
+ p_1x = p_home + p_draw
+ p_x2 = p_draw + p_away
     
-    # Mi-temps
-    lam_h_1h, lam_a_1h = lam_h * 0.43, lam_a * 0.43
-    best_p_1h = -1
-    score_1h = "0-0"
-    for h in range(4):
-        for a in range(4):
-            p = poisson(h, lam_h_1h) * poisson(a, lam_a_1h)
-            if p > best_p_1h:
-                best_p_1h = p
-                score_1h = f"{h}-{a}"
+ # Mi-temps
+ lam_h_1h, lam_a_1h = lam_h * 0.43, lam_a * 0.43
+ best_p_1h = -1
+ score_1h = "0-0"
+ for h in range(4):
+ for a in range(4):
+ p = poisson(h, lam_h_1h) * poisson(a, lam_a_1h)
+ if p > best_p_1h:
+ best_p_1h = p
+ score_1h = f"{h}-{a}"
 
-    # 2ème Mi-temps
-    lam_h_2h, lam_a_2h = lam_h * 0.57, lam_a * 0.57
-    best_p_2h = -1
-    score_2h = "1-0"
-    for h in range(4):
-        for a in range(4):
-            p = poisson(h, lam_h_2h) * poisson(a, lam_a_2h)
-            if p > best_p_2h:
-                best_p_2h = p
-                score_2h = f"{h}-{a}"
+ # 2ème Mi-temps
+ lam_h_2h, lam_a_2h = lam_h * 0.57, lam_a * 0.57
+ best_p_2h = -1
+ score_2h = "1-0"
+ for h in range(4):
+ for a in range(4):
+ p = poisson(h, lam_h_2h) * poisson(a, lam_a_2h)
+ if p > best_p_2h:
+ best_p_2h = p
+ score_2h = f"{h}-{a}"
 
-    total_corners_expected = round(max(7.0, min(13.0, (lam_h + lam_a) * 4.1)), 1)
-    corners_line = 9.5
-    p_over_corners = 56.0 if total_corners_expected > corners_line else 44.0
+ total_corners_expected = round(max(7.0, min(13.0, (lam_h + lam_a) * 4.1)), 1)
+ corners_line = 9.5
+ p_over_corners = 56.0 if total_corners_expected > corners_line else 44.0
     
-    scores_full.sort(key=lambda x: x["prob"], reverse=True)
+ scores_full.sort(key=lambda x: x["prob"], reverse=True)
     
-    markets = [
-        {"category": "1N2", "bet": f"Victoire {h_name}" if p_home >= p_away else f"Victoire {a_name}", "conf": int(max(p_home, p_away)), "odds": prob_to_odds(max(p_home, p_away))},
-        {"category": "Double Chance", "bet": f"1X ({h_name} ou Nul)" if p_1x >= p_x2 else f"X2 (Nul ou {a_name})", "conf": int(max(p_1x, p_x2)), "odds": prob_to_odds(max(p_1x, p_x2))},
-        {"category": "BTTS", "bet": "Les deux équipes marquent (Oui)" if p_btts_yes >= 52 else "Les deux équipes ne marquent pas (Non)", "conf": int(max(p_btts_yes, p_btts_no)), "odds": prob_to_odds(max(p_btts_yes, p_btts_no))},
-        {"category": "Total Buts", "bet": "Plus de 2.5 buts" if p_over >= 52 else "Moins de 2.5 buts", "conf": int(max(p_over, p_under)), "odds": prob_to_odds(max(p_over, p_under))},
-        {"category": "Corners", "bet": f"Plus de {corners_line} corners" if total_corners_expected > corners_line else f"Moins de {corners_line} corners", "conf": int(max(p_over_corners, 100 - p_over_corners) + 4), "odds": prob_to_odds(max(p_over_corners, 100 - p_over_corners) + 4)}
-    ]
+ markets = [
+ {"category": "1N2", "bet": f"Victoire {h_name}" if p_home >= p_away else f"Victoire {a_name}", "conf": int(max(p_home, p_away)), "odds": prob_to_odds(max(p_home, p_away))},
+ {"category": "Double Chance", "bet": f"1X ({h_name} ou Nul)" if p_1x >= p_x2 else f"X2 (Nul ou {a_name})", "conf": int(max(p_1x, p_x2)), "odds": prob_to_odds(max(p_1x, p_x2))},
+ {"category": "BTTS", "bet": "Les deux équipes marquent (Oui)" if p_btts_yes >= 52 else "Les deux équipes ne marquent pas (Non)", "conf": int(max(p_btts_yes, p_btts_no)), "odds": prob_to_odds(max(p_btts_yes, p_btts_no))},
+ {"category": "Total Buts", "bet": "Plus de 2.5 buts" if p_over >= 52 else "Moins de 2.5 buts", "conf": int(max(p_over, p_under)), "odds": prob_to_odds(max(p_over, p_under))},
+ {"category": "Corners", "bet": f"Plus de {corners_line} corners" if total_corners_expected > corners_line else f"Moins de {corners_line} corners", "conf": int(max(p_over_corners, 100 - p_over_corners) + 4), "odds": prob_to_odds(max(p_over_corners, 100 - p_over_corners) + 4)}
+ ]
     
-    # Algorithme de sélection ultra-sécurisé pour le pronostic recommandé (poids renforcé sur la Double Chance et la stabilité)
-    def reliability_score(mkt):
-        base_conf = mkt['conf']
-        if mkt['category'] == "Double Chance":
-            return base_conf * 1.12  # Bonus de sécurité élevé pour éliminer les risques inutiles
-        elif mkt['category'] == "Total Buts" and base_conf > 60:
-            return base_conf * 1.05
-        return base_conf
+ # Algorithme de sélection ultra-sécurisé pour le pronostic recommandé (poids renforcé sur la Double Chance et la stabilité)
+ def reliability_score(mkt):
+ base_conf = mkt['conf']
+ if mkt['category'] == "Double Chance":
+ return base_conf * 1.12  # Bonus de sécurité élevé pour éliminer les risques inutiles
+ elif mkt['category'] == "Total Buts" and base_conf > 60:                  
+ return base_conf * 1.05    
+ return base_conf
 
-    best_opt = max(markets, key=reliability_score)
+ best_opt = max(markets, key=reliability_score)
     
-    return {
-        "rec_bet": best_opt['bet'],
-        "rec_category": best_opt['category'],
-        "rec_conf": best_opt['conf'],
-        "rec_odd": best_opt['odds'],
-        "markets": markets,
-        "odd_1": prob_to_odds(p_home),
-        "odd_x": prob_to_odds(p_draw),
-        "odd_2": prob_to_odds(p_away),
-        "btts": f"{'Oui' if p_btts_yes >= 52 else 'Non'} ({int(max(p_btts_yes, p_btts_no))}%)",
-        "total_goals": round(lam_h + lam_a, 2),
-        "total_corners": total_corners_expected,
-        "final_score": scores_full[0]['score'],
-        "score_1h": score_1h,
-        "score_2h": score_2h,
-        "xg_home": round(lam_h, 2),
-        "xg_away": round(lam_a, 2)
-    }
+ return {  
+ "rec_bet": best_opt['bet'],        
+ "rec_category": best_opt['category'],
+ "rec_conf": best_opt['conf'],
+ "rec_odd": best_opt['odds'],
+ "markets": markets,
+ "odd_1": prob_to_odds(p_home),
+ "odd_x": prob_to_odds(p_draw),
+ "odd_2": prob_to_odds(p_away),
+ "btts": f"{'Oui' if p_btts_yes >= 52 else 'Non'} ({int(max(p_btts_yes, p_btts_no))}%)",
+ "total_goals": round(lam_h + lam_a, 2),
+ "total_corners": total_corners_expected,
+ "final_score": scores_full[0]['score'],
+ "score_1h": score_1h,
+ "score_2h": score_2h,
+ "xg_home": round(lam_h, 2),
+ "xg_away": round(lam_a, 2)
+ }
 
 def get_8_ai_agents(h, a, stats):
     return {
