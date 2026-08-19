@@ -31,16 +31,22 @@ selected_date = st.sidebar.date_input("Date des matchs", datetime.date.today())
 date_str = selected_date.strftime("%Y-%m-%d")
 
 # Fonction pour récupérer les matchs du jour via l'API
-@st.cache_data(ttl=300)  # Cache de 5 minutes pour éviter de saturer l'API
+@st.cache_data(ttl=300)
 def get_fixtures(date_target):
     url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures?date={date_target}"
     try:
         response = requests.get(url, headers=HEADERS)
+        # Affichage du statut pour diagnostiquer
+        st.sidebar.write(f"API Status: {response.status_code}")
+        
         if response.status_code == 200:
             return response.json().get("response", [])
+        else:
+            st.sidebar.error(f"Erreur API : {response.status_code}")
+            return []
     except Exception as e:
-        st.error(f"Erreur de connexion à l'API : {e}")
-    return []
+        st.sidebar.error(f"Erreur : {e}")
+        return []
 
 
 # Simulation ou chargement des matchs
