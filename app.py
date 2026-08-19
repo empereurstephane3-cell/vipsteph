@@ -12,14 +12,17 @@ st.title("VIP Steph - Prévisions Football en Direct ⚽")
 # --- CONFIGURATION API-FOOTBALL ---
 # --- CONFIGURATION API-FOOTBALL ---
 # --- CONFIGURATION API-FOOTBALL (DIRECT) ---
+# --- CONFIGURATION API-FOOTBALL ---
 try:
-    API_KEY = st.secrets["65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"]
+    API_KEY = st.secrets["API_KEY"]
     st.sidebar.success("🔑 Clé secrète détectée !")
-except:
-    API_KEY = "65ad65cff78e2148482946179f1a89300f749a0ae3b6d8db848ffbc41901dc4e"
-    st.sidebar.warning("⚠️ Clé non trouvée")
+except KeyError:
+    st.sidebar.error("❌ Erreur : Le nom 'API_KEY' est introuvable dans tes secrets.")
+    API_KEY = "ERREUR"
+except Exception as e:
+    st.sidebar.error(f"❌ Erreur générale : {e}")
+    API_KEY = "ERREUR"
 
-# URL et Header officiels d'API-Sports
 URL_API = "https://v3.football.api-sports.io/fixtures"
 HEADERS = {
     "x-apisports-key": API_KEY,
