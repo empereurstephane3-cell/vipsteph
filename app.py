@@ -194,9 +194,8 @@ def smooth(goals, games, league_avg):
 
 smooth_home_gf = smooth(h_data["home_gf"], h_data["home_played"], league_avg)
 smooth_home_ga = smooth(h_data["home_ga"], h_data["home_played"], league_avg)
-        smooth_away_gf = smooth(a_data['away_gf'], a_data['away_played'], league_avg)
-        smooth_away_ga = smooth(a_data['away_ga'], a_data['away_played'], league_avg)
-
+smooth_away_gf = smooth(a_data["away_gf"], a_data["away_played"], league_avg)
+smooth_away_ga = smooth(a_data["away_ga"], a_data["away_played"], league_avg)
         # Calcul des forces d'attaque et de défense avec les stats lissées
         home_att = smooth_home_gf / league_avg
         home_def = smooth_home_ga / league_avg
