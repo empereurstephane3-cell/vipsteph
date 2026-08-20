@@ -40,18 +40,26 @@ top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe
 TOP_LEAGUE_IDS = [2, 3, 39, 40, 61, 78, 135, 140, 848]
 
 # --- FONCTION DE RÉCUPÉRATION DES MATCHS ---
-@st.cache_data(ttl=60)
+# --- FONCTION RÉCUPÉRATION (MODE DEBUG TOTAL) ---
+@st.cache_data(ttl=1)
 def get_fixtures(target_date):
     if not API_KEY: return "NO_KEY"
     try:
         url = f"{URL_API}?date={target_date.strftime('%Y-%m-%d')}"
         response = requests.get(url, headers=HEADERS)
-        if response.status_code == 200: return response.json().get("response", [])
-        return f"API_ERROR_{response.status_code}"
-    except Exception as e: return f"CONNEXION_ERROR: {e}"
-
-raw_matches = get_fixtures(date_target)
-
+        
+        # On affiche le code statut HTTP (200, 403, 429, etc.) dans l'app
+        st.sidebar.write(f"Code HTTP API : {response.status_code}")
+        
+        data = response.json()
+        
+        # Si l'API renvoie une erreur (ex: limite dépassée, clé invalide)
+        if "errors" in data and data["errors"]:
+            return f"ERREUR API : {data['errors']}"
+            
+        return data.get("response", [])
+    except Exception as e: 
+        return f"CONNEXION_ERROR: {e}"
 # --- GESTION DU FILTRE & DEBUG ---
 if isinstance(raw_matches, list):
     if top_leagues_only:
