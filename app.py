@@ -39,8 +39,7 @@ top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe
 
 TOP_LEAGUE_IDS = [2, 3, 39, 40, 61, 78, 135, 140, 848]
 
-# --- FONCTION DE RÉCUPÉRATION DES MATCHS ---
-# --- FONCTION RÉCUPÉRATION (MODE DEBUG TOTAL) ---
+# --- FONCTION DE RÉCUPÉRATION (AVEC DEBUG HTTP) ---
 @st.cache_data(ttl=1)
 def get_fixtures(target_date):
     if not API_KEY: return "NO_KEY"
@@ -48,18 +47,20 @@ def get_fixtures(target_date):
         url = f"{URL_API}?date={target_date.strftime('%Y-%m-%d')}"
         response = requests.get(url, headers=HEADERS)
         
-        # On affiche le code statut HTTP (200, 403, 429, etc.) dans l'app
+        # Affiche le code HTTP dans la sidebar (200 = OK, 403 = Clé invalide, 429 = Quota dépassé)
         st.sidebar.write(f"Code HTTP API : {response.status_code}")
         
         data = response.json()
-        
-        # Si l'API renvoie une erreur (ex: limite dépassée, clé invalide)
         if "errors" in data and data["errors"]:
             return f"ERREUR API : {data['errors']}"
             
         return data.get("response", [])
     except Exception as e: 
         return f"CONNEXION_ERROR: {e}"
+
+# Appel de la fonction de récupération
+raw_matches = get_fixtures(date_target)
+
 # --- GESTION DU FILTRE & DEBUG ---
 if isinstance(raw_matches, list):
     if top_leagues_only:
@@ -76,7 +77,7 @@ else:
     else:
         st.sidebar.error(f"❌ {raw_matches}")
 
-# --- MOTEUR DES 8 AGENTS IA POUR UNE FIABILITÉ MAXIMALE ---
+# --- MOTEUR DES 8 AGENTS IA ---
 def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0):
     seed_val = sum(ord(c) for c in h_team + a_team)
     random.seed(seed_val)
@@ -86,13 +87,11 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
     total_goals = score_h + score_a
     total_corners = random.randint(8, 14)
     
-    # 1ère Mi-temps
     ht_1n2 = random.choice(["1 (Avantage Domicile)", "N (Match Nul à la pause)", "2 (Avantage Extérieur)"])
     ht_goals = random.choice(["+0.5 but validé", "+1.5 buts offensif"])
     ht_shots = random.randint(4, 9)
     ht_corners = random.randint(3, 6)
     
-    # 2ème Mi-temps
     ft_1n2 = random.choice(["1 (Domination 2MT)", "N (Équilibre en 2MT)", "2 (Renversement Extérieur 2MT)"])
     ft_goals = random.choice(["+0.5 but en 2MT", "+1.5 buts en 2MT", "Match ouvert en fin de match"])
     ft_shots = random.randint(5, 11)
@@ -100,12 +99,6 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
     
     defensive_reliability = "Bloc solide attendu" if total_goals < 3 else "Jeu ouvert / Failles défensives"
     match_tempo = "Intensité élevée en seconde période" if random.random() > 0.3 else "Gestion du score en fin de match"
-    
-    conf_score = random.randint(82, 96)
-    conf_goals = random.randint(85, 98)
-    conf_corners = random.randint(80, 93)
-    conf_ht = random.randint(83, 94)
-    conf_ft = random.randint(81, 95)
     
     return {
         "score_exact": f"{score_h} - {score_a}",
@@ -121,11 +114,11 @@ def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0)
         "ft_corners": ft_corners,
         "defense_note": defensive_reliability,
         "tempo_note": match_tempo,
-        "conf_score": conf_score,
-        "conf_goals": conf_goals,
-        "conf_corners": conf_corners,
-        "conf_ht": conf_ht,
-        "conf_ft": conf_ft
+        "conf_score": random.randint(82, 96),
+        "conf_goals": random.randint(85, 98),
+        "conf_corners": random.randint(80, 93),
+        "conf_ht": random.randint(83, 94),
+        "conf_ft": random.randint(81, 95)
     }
 
 # --- AFFICHAGE DE L'APPLICATION ---
@@ -158,7 +151,7 @@ if matches:
     if status_short in ["1H", "HT", "2H", "ET", "P"]:
         status_display = f"🔴 EN DIRECT ({elapsed}')"
     elif status_short in ["FT", "AET", "PEN"]:
-        status_display = f"✅ TERMINÉ"
+        status_display = "✅ TERMINÉ"
     else:
         status_display = f"⏰ À VENIR ({time_str})"
 
