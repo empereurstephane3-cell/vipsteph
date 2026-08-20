@@ -19,13 +19,16 @@ if 'selected_date' not in st.session_state:
 def update_date():
     st.session_state.selected_date = st.session_state.date_input_widget
 
-# --- CONFIGURATION API-FOOTBALL ---
+# --- CONFIGURATION API-FOOTBALL (CHARGEMENT SÉCURISÉ) ---
 try:
     API_KEY = st.secrets["API_KEY"]
-    st.sidebar.success(f"Clé chargée ! (Longueur : {len(API_KEY)} caractères)")
+    st.sidebar.success("✅ Clé API chargée avec succès !")
 except Exception as e:
     API_KEY = ""
-    st.sidebar.error(f"Erreur de lecture des secrets : {e}")
+    st.sidebar.error("❌ Erreur : Clé API introuvable dans les secrets Streamlit.")
+
+URL_API = "https://v3.football.api-sports.io/fixtures"
+HEADERS = {"x-apisports-key": API_KEY}
 
 # --- BARRE LATÉRALE : PARAMÈTRES & FILTRES ---
 st.sidebar.header("📅 Paramètres & Matchs")
@@ -37,20 +40,16 @@ date_target = st.sidebar.date_input(
     on_change=update_date
 )
 
-date_str = st.session_state.selected_date.strftime("%Y-%m-%d")
 top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe & Monde)", value=True)
-
 TOP_LEAGUE_IDS = [2, 3, 39, 40, 61, 78, 135, 140, 848]
 
-# --- FONCTION DE RÉCUPÉRATION (AVEC DEBUG HTTP) ---
+# --- FONCTION DE RÉCUPÉRATION DES MATCHS ---
 @st.cache_data(ttl=1)
 def get_fixtures(target_date):
     if not API_KEY: return "NO_KEY"
     try:
         url = f"{URL_API}?date={target_date.strftime('%Y-%m-%d')}"
         response = requests.get(url, headers=HEADERS)
-        
-        # Affiche le code HTTP dans la sidebar (200 = OK, 403 = Clé invalide, 429 = Quota dépassé)
         st.sidebar.write(f"Code HTTP API : {response.status_code}")
         
         data = response.json()
@@ -76,7 +75,7 @@ if isinstance(raw_matches, list):
 else:
     matches = []
     if raw_matches == "NO_KEY":
-        st.sidebar.error("❌ Erreur : Clé API manquante dans les secrets !")
+        st.sidebar.error("❌ Clé API manquante.")
     else:
         st.sidebar.error(f"❌ {raw_matches}")
 
@@ -188,7 +187,7 @@ if matches:
 
 else:
     if top_leagues_only:
-        st.info("Aucun 'Top Match' trouvé pour cette date avec le filtre actif. Décoche 'Uniquement Top Championnats' dans la barre latérale pour voir tous les matchs ou charger un exemple type.")
+        st.info("Aucun 'Top Match' trouvé pour cette date avec le filtre actif. Décoche 'Uniquement Top Championnats' dans la barre latérale pour voir tous les matchs.")
     else:
         st.info("Aucun match trouvé pour cette date. Chargement d'un cas type analysé par les 8 Agents.")
         
