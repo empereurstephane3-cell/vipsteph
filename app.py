@@ -20,9 +20,12 @@ def update_date():
     st.session_state.selected_date = st.session_state.date_input_widget
 
 # --- CONFIGURATION API-FOOTBALL ---
-API_KEY = st.secrets.get("API_KEY", "")
-URL_API = "https://v3.football.api-sports.io/fixtures"
-HEADERS = {"x-apisports-key": API_KEY}
+try:
+    API_KEY = st.secrets["API_KEY"]
+    st.sidebar.success(f"Clé chargée ! (Longueur : {len(API_KEY)} caractères)")
+except Exception as e:
+    API_KEY = ""
+    st.sidebar.error(f"Erreur de lecture des secrets : {e}")
 
 # --- BARRE LATÉRALE : PARAMÈTRES & FILTRES ---
 st.sidebar.header("📅 Paramètres & Matchs")
