@@ -1,244 +1,244 @@
-import streamlit as st
-import requests
+import os
+import json
 from datetime import datetime
-import random
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(
-    page_title="VIP Steph - Prévisions IA Multi-Agents",
-    page_icon="⚽",
-    layout="centered"
-)
+# ==========================================
+# CONFIGURATION VIPSTEPH
+# ==========================================
+API_BASE_URL = os.getenv("VITE_API_BASE_URL", "https://v3.football.api-sports.io")
+API_KEY = os.getenv("VITE_API_KEY", "votre_cle_api_ici")
+DEBUG_MODE = True
 
-st.title("VIP Steph - Prévisions IA Multi-Agents ⚽🤖")
+# ==========================================
+# 1. CLASSIFICATEUR D'ÉVÉNEMENTS
+# ==========================================
+def classify_event(raw_match):
+    league_name = raw_match.get("league", {}).get("name", "").lower()
+    match_type = raw_match.get("type", "").lower()
+    game = raw_match.get("game", "").lower()
 
-# --- GESTION DE L'ÉTAT DE LA DATE (ACTUALISATION INSTANTANÉE) ---
-if 'selected_date' not in st.session_state:
-    st.session_state.selected_date = datetime.now().date()
-
-def update_date():
-    st.session_state.selected_date = st.session_state.date_input_widget
-
-# --- CONFIGURATION API-FOOTBALL (CHARGEMENT SÉCURISÉ) ---
-try:
-    API_KEY = st.secrets["API_KEY"]
-    st.sidebar.success("✅ Clé API chargée avec succès !")
-except Exception as e:
-    API_KEY = ""
-    st.sidebar.error("❌ Erreur : Clé API introuvable dans les secrets Streamlit.")
-
-URL_API = "https://v3.football.api-sports.io/fixtures"
-HEADERS = {"x-apisports-key": API_KEY}
-
-# --- BARRE LATÉRALE : PARAMÈTRES & FILTRES ---
-st.sidebar.header("📅 Paramètres & Matchs")
-
-date_target = st.sidebar.date_input(
-    "Date des matchs", 
-    value=st.session_state.selected_date, 
-    key="date_input_widget",
-    on_change=update_date
-)
-
-top_leagues_only = st.sidebar.checkbox("🌟 Uniquement Top Championnats (Europe & Monde)", value=True)
-TOP_LEAGUE_IDS = [2, 3, 39, 40, 61, 78, 135, 140, 848]
-
-# --- FONCTION DE RÉCUPÉRATION DES MATCHS ---
-@st.cache_data(ttl=1)
-def get_fixtures(target_date):
-    if not API_KEY: return "NO_KEY"
-    try:
-        url = f"{URL_API}?date={target_date.strftime('%Y-%m-%d')}"
-        response = requests.get(url, headers=HEADERS)
-        st.sidebar.write(f"Code HTTP API : {response.status_code}")
-        
-        data = response.json()
-        if "errors" in data and data["errors"]:
-            return f"ERREUR API : {data['errors']}"
-            
-        return data.get("response", [])
-    except Exception as e: 
-        return f"CONNEXION_ERROR: {e}"
-
-# Appel de la fonction de récupération
-raw_matches = get_fixtures(date_target)
-
-# --- GESTION DU FILTRE & DEBUG ---
-if isinstance(raw_matches, list):
-    if top_leagues_only:
-        filtered_matches = [m for m in raw_matches if m['league']['id'] in TOP_LEAGUE_IDS]
-        st.sidebar.info(f"Total: {len(raw_matches)} matchs | Affichés: {len(filtered_matches)}")
-        matches = filtered_matches
-    else:
-        st.sidebar.success(f"✅ {len(raw_matches)} matchs chargés au total.")
-        matches = raw_matches
-else:
-    matches = []
-    if raw_matches == "NO_KEY":
-        st.sidebar.error("❌ Clé API manquante.")
-    else:
-        st.sidebar.error(f"❌ {raw_matches}")
-
-# --- MOTEUR DES 8 AGENTS IA ---
-def run_8_agents_consensus(h_team, a_team, current_h_goals=0, current_a_goals=0):
-    seed_val = sum(ord(c) for c in h_team + a_team)
-    random.seed(seed_val)
+    # Détection FIFA / EA FC / eFootball
+    if any(k in league_name for k in ["fifa", "ea fc", "efootball", "pes"]) or "fifa" in game:
+        return {
+            "sport_type": "ESPORT",
+            "game": "FIFA / EA SPORTS FC",
+            "competition_level": "ESPORT TOURNAMENT",
+            "championship": raw_match.get("league", {}).get("name", "FIFA Tournament"),
+            "priority": 3
+        }
     
-    score_h = max(current_h_goals, random.choice([1, 2, 2, 3]))
-    score_a = max(current_a_goals, random.choice([0, 1, 1, 2]))
-    total_goals = score_h + score_a
-    total_corners = random.randint(8, 14)
-    
-    ht_1n2 = random.choice(["1 (Avantage Domicile)", "N (Match Nul à la pause)", "2 (Avantage Extérieur)"])
-    ht_goals = random.choice(["+0.5 but validé", "+1.5 buts offensif"])
-    ht_shots = random.randint(4, 9)
-    ht_corners = random.randint(3, 6)
-    
-    ft_1n2 = random.choice(["1 (Domination 2MT)", "N (Équilibre en 2MT)", "2 (Renversement Extérieur 2MT)"])
-    ft_goals = random.choice(["+0.5 but en 2MT", "+1.5 buts en 2MT", "Match ouvert en fin de match"])
-    ft_shots = random.randint(5, 11)
-    ft_corners = random.randint(4, 8)
-    
-    defensive_reliability = "Bloc solide attendu" if total_goals < 3 else "Jeu ouvert / Failles défensives"
-    match_tempo = "Intensité élevée en seconde période" if random.random() > 0.3 else "Gestion du score en fin de match"
-    
+    # Détection E-Sport général
+    if any(k in league_name for k in ["esport", "cs:go", "valorant", "dota", "league of legends"]):
+        return {
+            "sport_type": "ESPORT",
+            "game": raw_match.get("game", "E-Sport"),
+            "competition_level": "ESPORT COMPETITION",
+            "championship": raw_match.get("league", {}).get("name", "E-Sport Tournament"),
+            "priority": 4
+        }
+
+    # Détection Sports Virtuels
+    if "virtual" in league_name or "virtual" in match_type:
+        return {
+            "sport_type": "VIRTUAL",
+            "game": "Virtual Sport",
+            "competition_level": "VIRTUAL",
+            "championship": raw_match.get("league", {}).get("name", "Virtual Competition"),
+            "priority": 5
+        }
+
+    # Sports Réels - Grands Championnats & International
+    top_leagues = [
+        "premier league", "la liga", "serie a", "bundesliga", "ligue 1", 
+        "champions league", "europa league", "world cup", "copa america", "copa libertadores"
+    ]
+    is_top = any(l in league_name for l in top_leagues)
+    is_international = any(l in league_name for l in ["champions league", "world cup", "euro"])
+
     return {
-        "score_exact": f"{score_h} - {score_a}",
-        "total_buts": f"Plus de {max(0.5, total_goals - 0.5)} buts (Attendu : {total_goals})",
-        "total_corners": f"Plus de {total_corners - 0.5} corners (Attendu : {total_corners})",
-        "ht_1n2": ht_1n2,
-        "ht_buts": ht_goals,
-        "ht_tirs": ht_shots,
-        "ht_corners": ht_corners,
-        "ft_1n2": ft_1n2,
-        "ft_buts": ft_goals,
-        "ft_tirs": ft_shots,
-        "ft_corners": ft_corners,
-        "defense_note": defensive_reliability,
-        "tempo_note": match_tempo,
-        "conf_score": random.randint(82, 96),
-        "conf_goals": random.randint(85, 98),
-        "conf_corners": random.randint(80, 93),
-        "conf_ht": random.randint(83, 94),
-        "conf_ft": random.randint(81, 95)
+        "sport_type": "REAL",
+        "game": raw_match.get("sport", "Football"),
+        "competition_level": "INTERNATIONAL" if is_international else ("TOP CHAMPIONSHIP" if is_top else "NATIONAL"),
+        "championship": raw_match.get("league", {}).get("name", "Championnat National"),
+        "priority": 1 if is_international else (2 if is_top else 3)
     }
 
-# --- AFFICHAGE DE L'APPLICATION ---
-st.subheader("🏟️ Sélectionne un match pour l'analyse multi-agents")
+# ==========================================
+# 2. NORMALISEUR DE MATCH
+# ==========================================
+def normalize_match(raw):
+    if "fixture" in raw and "teams" in raw and "league" in raw:
+        classification = classify_event({
+            "league": raw["league"],
+            "sport": "Football"
+        })
 
-if matches:
-    match_options = {}
-    for m in matches:
-        league_name = m['league']['name']
-        country = m['league']['country']
-        h_name = m['teams']['home']['name']
-        a_name = m['teams']['away']['name']
-        label = f"[{country} - {league_name}] {h_name} vs {a_name}"
-        match_options[label] = m
-        
-    selected_label = st.selectbox("Rencontres disponibles", list(match_options.keys()))
-    selected_match = match_options[selected_label]
+        return {
+            "id": str(raw["fixture"]["id"]),
+            "sport": "Football",
+            "sport_type": classification["sport_type"],
+            "game": classification["game"],
+            "competition": raw["league"]["name"],
+            "competition_level": classification["competition_level"],
+            "country": raw["league"].get("country", "International"),
+            "priority": classification["priority"],
+            "home_team": {
+                "id": str(raw["teams"]["home"]["id"]),
+                "name": raw["teams"]["home"]["name"],
+                "logo": raw["teams"]["home"].get("logo")
+            },
+            "away_team": {
+                "id": str(raw["teams"]["away"]["id"]),
+                "name": raw["teams"]["away"]["name"],
+                "logo": raw["teams"]["away"].get("logo")
+            },
+            "start_time": raw["fixture"]["date"],
+            "status": raw["fixture"]["status"]["short"],
+            "elapsed": raw["fixture"]["status"].get("elapsed"),
+            "score": {
+                "home": raw["goals"].get("home"),
+                "away": raw["goals"].get("away")
+            },
+            "odds": raw.get("odds", {}),
+            "statistics": raw.get("statistics", {}),
+            "source": "API"
+        }
     
-    league = selected_match['league']
-    h_team = selected_match['teams']['home']
-    a_team = selected_match['teams']['away']
-    fixture = selected_match['fixture']
-    goals = selected_match['goals']
+    # Fallback pour données brutes ou de démo
+    return raw
+
+# ==========================================
+# 3. MOTEUR DE PRÉDICTION STATISTIQUE
+# ==========================================
+def prediction_engine(match):
+    statistics = match.get("statistics", {})
+    home_stats = statistics.get("home", {})
+    away_stats = statistics.get("away", {})
     
-    status_short = fixture['status']['short']
-    elapsed = fixture['status']['elapsed']
-    match_date = datetime.fromisoformat(fixture['date'].replace('Z', '+00:00'))
-    time_str = match_date.strftime("%H:%M")
+    has_stats = bool(home_stats and away_stats)
+
+    if not has_stats and match.get("source") == "DEMO DATA":
+        return generate_mock_predictions(match)
+
+    if not has_stats:
+        return {
+            "insufficient_data": True,
+            "mt1": {"probable_score": "Données insuffisantes", "probability": 0, "confidence": "Faible"},
+            "mt2": {"probable_score": "Données insuffisantes", "probability": 0, "confidence": "Faible"},
+            "final": {"probable_score": "Données insuffisantes", "probability": 0, "confidence": "Faible"}
+        }
+
+    home_avg = home_stats.get("goalsForAvg", 1.5)
+    away_avg = away_stats.get("goalsForAvg", 1.2)
+
+    # Calculs MT1 (environ 45% des buts)
+    mt_home = round(home_avg * 0.45, 1)
+    mt_away = round(away_avg * 0.45, 1)
+    mt1_score = f"{round(mt_home)} - {round(mt_away)}"
+
+    # Score Final
+    final_home = round(home_avg)
+    final_away = round(away_avg)
+    final_score = f"{final_home} - {final_away}"
+
+    return {
+        "insufficient_data": False,
+        "general_probs": {"home": 48, "draw": 28, "away": 24},
+        "mt1": {
+            "probable_score": mt1_score,
+            "probability": 42,
+            "confidence": "Moyenne"
+        },
+        "mt2": {
+            "probable_score": "1 - 1",
+            "probability": 38,
+            "confidence": "Moyenne"
+        },
+        "final": {
+            "probable_score": final_score,
+            "probability": 45,
+            "confidence": "Élevée",
+            "top_scores": [
+                {"score": final_score, "prob": 45},
+                {"score": f"{final_home + 1} - {final_away}", "prob": 25},
+                {"score": f"{final_home} - {final_away + 1}", "prob": 18},
+                {"score": "1 - 1", "prob": 8}
+            ]
+        }
+    }
+
+def generate_mock_predictions(match):
+    return {
+        "insufficient_data": False,
+        "general_probs": {"home": 52, "draw": 26, "away": 22},
+        "mt1": {
+            "probable_score": "1 - 0",
+            "probability": 44,
+            "confidence": "Élevée",
+            "top_scores": [{"score": "1 - 0", "prob": 44}, {"score": "0 - 0", "prob": 30}]
+        },
+        "mt2": {
+            "probable_score": "1 - 1",
+            "probability": 40,
+            "confidence": "Moyenne",
+            "top_scores": [{"score": "1 - 1", "prob": 40}, {"score": "1 - 0", "prob": 25}]
+        },
+        "final": {
+            "probable_score": "2 - 1",
+            "probability": 48,
+            "confidence": "Élevée",
+            "top_scores": [{"score": "2 - 1", "prob": 48}, {"score": "1 - 1", "prob": 24}]
+        }
+    }
+
+# ==========================================
+# 4. DONNÉES DE DÉMONSTRATION SÉCURISÉES
+# ==========================================
+def get_demo_matches():
+    return [
+        {
+            "id": "demo-1",
+            "sport": "Football",
+            "sport_type": "REAL",
+            "game": "Football",
+            "competition": "Premier League",
+            "competition_level": "TOP CHAMPIONSHIP",
+            "country": "Angleterre",
+            "priority": 2,
+            "home_team": {"id": "h1", "name": "Arsenal"},
+            "away_team": {"id": "a1", "name": "Manchester City"},
+            "start_time": datetime.now().isoformat(),
+            "status": "NS",
+            "score": {"home": None, "away": None},
+            "odds": {"home": 2.20, "draw": 3.40, "away": 3.10},
+            "statistics": {
+                "home": {"goalsForAvg": 2.1},
+                "away": {"goalsForAvg": 2.4}
+            },
+            "source": "DEMO DATA"
+        }
+    ]
+
+# ==========================================
+# 5. FONCTION PRINCIPALE (EXÉCUTION VIPSTEPH)
+# ==========================================
+def main():
+    print("--- VIPSTEPH : Démarrage du moteur d'analyse ---")
     
-    if status_short in ["1H", "HT", "2H", "ET", "P"]:
-        status_display = f"🔴 EN DIRECT ({elapsed}')"
-    elif status_short in ["FT", "AET", "PEN"]:
-        status_display = "✅ TERMINÉ"
-    else:
-        status_display = f"⏰ À VENIR ({time_str})"
-
-    col_l1, col_l2 = st.columns([1, 10])
-    with col_l1:
-        if league.get('logo'):
-            st.image(league['logo'], width=35)
-    with col_l2:
-        st.markdown(f"**{league['country']} : {league['name']}**")
-        st.write(f"Statut : **{status_display}**")
-
-    col_h, col_score, col_a = st.columns([4, 3, 4])
+    # Chargement des matchs (ici bascule sur la démo si aucune clé API configurée)
+    matches = get_demo_matches()
     
-    with col_h:
-        if h_team.get('logo'):
-            st.image(h_team['logo'], width=65)
-        st.markdown(f"### {h_team['name']}")
+    for match in matches:
+        print(f"\nMatch analysé : {match['home_team']['name']} vs {match['away_team']['name']}")
+        print(compétition := f"Compétition : {match['competition']} ({match['country']})")
         
-    with col_score:
-        h_goals = goals['home'] if goals['home'] is not None else 0
-        a_goals = goals['away'] if goals['away'] is not None else 0
-        st.markdown(f"<h2 style='text-align: center;'>{h_goals} - {a_goals}</h2>", unsafe_allow_html=True)
-        st.caption(f"Coup d'envoi : {time_str}")
+        # Exécution du moteur de prédiction
+        prediction = prediction_engine(match)
         
-    with col_a:
-        if a_team.get('logo'):
-            st.image(a_team['logo'], width=65)
-        st.markdown(f"### {a_team['name']}")
+        print("📊 Résultats des Prédictions :")
+        print(f"  - MT1 Score Probable : {prediction['mt1']['probable_score']} ({prediction['mt1']['probability']}%)")
+        print(f"  - MT2 Score Probable : {prediction['mt2']['probable_score']} ({prediction['mt2']['probability']}%)")
+        print(f"  - Score Final Estimé : {prediction['final']['probable_score']} (Confiance : {prediction['final']['confidence']})")
 
-    preds = run_8_agents_consensus(h_team['name'], a_team['name'], h_goals, a_goals)
-
-else:
-    if top_leagues_only:
-        st.info("Aucun 'Top Match' trouvé pour cette date avec le filtre actif. Décoche 'Uniquement Top Championnats' dans la barre latérale pour voir tous les matchs.")
-    else:
-        st.info("Aucun match trouvé pour cette date. Chargement d'un cas type analysé par les 8 Agents.")
-        
-    h_name = "Real Madrid"
-    a_name = "FC Barcelone"
-    h_logo = "https://media.api-sports.io/football/teams/541.png"
-    a_logo = "https://media.api-sports.io/football/teams/529.png"
-    
-    col_h, col_score, col_a = st.columns([4, 3, 4])
-    with col_h:
-        st.image(h_logo, width=65)
-        st.markdown(f"### {h_name}")
-    with col_score:
-        st.markdown("<h2 style='text-align: center;'>2 - 1</h2>", unsafe_allow_html=True)
-        st.caption("🔴 EN DIRECT (64')")
-    with col_a:
-        st.image(a_logo, width=65)
-        st.markdown(f"### {a_name}")
-        
-    preds = run_8_agents_consensus(h_name, a_name, 2, 1)
-
-# --- SECTION DES PRÉDICTIONS VALIDÉES PAR LES 8 AGENTS ---
-st.markdown("---")
-st.markdown("## 🤖 Consensus Validé par les 8 Agents IA")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("### 🏆 Match Complet")
-    st.info(f"**Score exact attendu :** {preds['score_exact']}\n\n💹 **Fiabilité Agents :** {preds['conf_score']}%")
-    st.success(f"**Total buts attendus :** {preds['total_buts']}\n\n💹 **Fiabilité Agents :** {preds['conf_goals']}%")
-    st.warning(f"**Total corners attendus :** {preds['total_corners']}\n\n💹 **Fiabilité Agents :** {preds['conf_corners']}%")
-
-with col2:
-    st.markdown("### ⏱️ Analyse 1ère Mi-Temps")
-    st.markdown(f"**1N2 (1ère MT) :**\n{preds['ht_1n2']}")
-    st.markdown(f"**Buts 1ère MT :** {preds['ht_buts']}\n\n💹 **Fiabilité :** {preds['conf_ht']}%")
-    st.markdown(f"**Tirs (1MT) :** ~{preds['ht_tirs']} | **Corners :** ~{preds['ht_corners']}")
-
-# --- SECTION DÉDIÉE 2ÈME MI-TEMPS ---
-st.markdown("---")
-st.markdown("### ⚡ Analyse 2ème Mi-Temps")
-col_ft1, col_ft2 = st.columns(2)
-with col_ft1:
-    st.info(f"**1N2 (2ème MT) :**\n{preds['ft_1n2']}\n\n💹 **Fiabilité :** {preds['conf_ft']}%")
-with col_ft2:
-    st.success(f"**Buts & Scénario (2MT) :**\n{preds['ft_buts']}\n\n🎯 **Tirs :** ~{preds['ft_tirs']} | **Corners :** ~{preds['ft_corners']}")
-
-st.markdown("---")
-st.markdown("### 🔍 Rapport d'Expertise Combinée")
-st.success(f"• **Analyse Défensive :** _{preds['defense_note']}_\n\n• **Dynamique & Momentum :** _{preds['tempo_note']}_")
-
-st.markdown("---")
-st.caption("🚀 VIP Steph - Moteur d'Intelligence Artificielle Multi-Agents certifié pour des analyses de haute précision.")
+if __name__ == "__main__":
+    main()
