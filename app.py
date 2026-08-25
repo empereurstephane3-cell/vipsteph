@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from datetime import datetime
+import math
 
 # ==========================================
 # 1. CONFIGURATION & DESIGN PREMIUM
@@ -71,49 +72,84 @@ LEAGUE_IDS = {
 }
 
 # ==========================================
-# 3. MOTEUR DE PRONOSTICS COHÉRENT (BASÉ SUR LES VRAIES DONNÉES)
+# 3. MOTEUR MATHÉMATIQUE DE LA LOI DE POISSON
 # ==========================================
-def generate_coherent_analysis(home_name, away_name, h_goals, a_goals, status_short):
-    total_goals = h_goals + a_goals
-    goal_diff = h_goals - a_goals
-    
-    # Estimation des xG basée sur les buts réels et le statut
-    xg_home = round(1.2 + (h_goals * 0.8), 1)
-    xg_away = round(1.0 + (a_goals * 0.8), 1)
-    
-    # Logique cohérente des pronostics selon la physionomie du match
-    if status_short in ["1H", "2H", "ET"]:
-        if total_goals >= 3:
-            rec = f"Match très ouvert : Plus de 3.5 buts ou Over 4.5"
-        elif h_goals > a_goals:
-            rec = f"Avantage net pour {home_name} (Gestion du score)"
-        elif a_goals > h_goals:
-            rec = f"Gros coup de {away_name} à l'extérieur (Double chance X2)"
-        else:
-            rec = f"Score nul en cours : Les deux équipes marquent (BTTS)"
-    elif status_short == "FT":
-        if h_goals > a_goals:
-            rec = f"Victoire logique de {home_name} confirmée au coup de sifflet final"
-        elif a_goals > h_goals:
-            rec = f"Victoire de l'extérieur ({away_name}) validée"
-        else:
-            rec = f"Match nul logique (Partage des points)"
-    else:  # Match non commencé (NS)
-        if "Real" in home_name or "Barca" in home_name or "Arsenal" in home_name or "City" in home_name:
-            rec = f"Match déséquilibré : Victoire de favori ou Plus de 1.5 buts"
-        else:
-            rec = f"Les deux équipes marquent (BTTS) ou Match fermé"
+def poisson_pmf(lmbda, k):
+    """Calcule la probabilité de Poisson pour k buts sachant la moyenne lambda."""
+    if lmbda <= 0:
+        return 1.0 if k == 0 else 0.0
+    return (lmbda**k) * math.exp(-lmbda) / math.factorial(k)
+
+def calculate_poisson_analysis(home_name, away_name, h_goals, a_goals, status_short):
+    # Estimation des taux de buts attendus (lambda) ajustés avec les buts réels si le match a commencé
+    base_lambda_home = 1.45 + (h_goals * 0.5)
+    base_lambda_away = 1.15 + (a_goals * 0.5)
+
+    home_win_prob = 0.0
+    draw_prob = 0.0
+    away_win_prob = 0.0
+    btts_prob = 0.0
+    over_25_prob = 0.0
+
+    score_probabilities = []
+    max_goals = 5
+
+    # Calcul de la matrice de Poisson (tous les scores de 0-0 à 5-5)
+    for h in range(max_goals + 1):
+        for a in range(max_goals + 1):
+            p_home = poisson_pmf(base_lambda_home, h)
+            p_away = poisson_pmf(base_lambda_away, a)
+            p_score = p_home * p_away
+            
+            score_probabilities.append(((h, a), p_score))
+
+            if h > a:
+                home_win_prob += p_score
+            elif h == a:
+                draw_prob += p_score
+            else:
+                away_win_prob += p_score
+
+            if h > 0 and a > 0:
+                btts_prob += p_score
+            if (h + a) > 2.5:
+                over_25_prob += p_score
+
+    # Tri des scores par probabilité décroissante pour trouver les plus probables
+    score_probabilities.sort(key=lambda x: x[1], reverse=True)
+    top_score_1 = f"{score_probabilities[0][0][0]} - {score_probabilities[0][0][1]}"
+    top_score_2 = f"{score_probabilities[1][0][0]} - {score_probabilities[1][0][1]}"
+
+    # Conversion en pourcentages lisibles
+    hw_pct = round(home_win_prob * 100, 1)
+    dr_pct = round(draw_prob * 100, 1)
+    aw_pct = round(away_win_prob * 100, 1)
+    btts_pct = round(btts_prob * 100, 1)
+    over_pct = round(over_25_prob * 100, 1)
+
+    # Détermination d'une recommandation robuste basée sur le modèle
+    if hw_pct >= 55:
+        rec = f"Victoire de {home_name} ({hw_pct}% de probabilité)"
+    elif aw_pct >= 50:
+        rec = f"Gros potentiel extérieur : {away_name} ({aw_pct}%)"
+    elif btts_pct >= 62:
+        rec = f"Les deux équipes marquent (BTTS à {btts_pct}%)"
+    elif over_pct >= 60:
+        rec = f"Match ouvert : Plus de 2.5 buts ({over_pct}%)"
+    else:
+        rec = f"Rencontre équilibrée (Double chance ou Match Nul)"
 
     return {
-        "goals_exp": round(xg_home + xg_away, 1),
-        "corners_exp": 9.5 if total_goals > 1 else 8.5,
-        "shots_on_target_exp": round(6.0 + total_goals * 1.5, 1),
-        "scores": [f"{h_goals} - {a_goals}", f"{h_goals + 1} - {max(0, a_goals)}"],
-        "rec": rec
+        "goals_exp": round(base_lambda_home + base_lambda_away, 2),
+        "corners_exp": 9.8,
+        "shots_on_target_exp": round(8.0 + (base_lambda_home + base_lambda_away) * 1.5, 1),
+        "scores": [top_score_1, top_score_2],
+        "rec": rec,
+        "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%"
     }
 
 # ==========================================
-# 4. FONCTION API STRICTE
+# 4. FONCTION API
 # ==========================================
 def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
     if not api_key:
@@ -160,7 +196,7 @@ def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
                 if status_short in ["1H", "2H", "HT", "ET", "P"]:
                     status_text = f"🔴 LIVE {elapsed}'" if elapsed else "🔴 LIVE"
                 elif status_short == "FT":
-                    status_text = "🏁 TERMINÉ"
+                    status_text = f"🏁 TERMINÉ"
                 else:
                     status_text = f"⏳ {fixture['date'][11:16]}"
 
@@ -185,7 +221,7 @@ def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
                         "logo": teams["away"]["logo"],
                         "goals": a_g
                     },
-                    "stats": generate_coherent_analysis(h_name, a_name, h_g, a_g, status_short)
+                    "stats": calculate_poisson_analysis(h_name, a_name, h_g, a_g, status_short)
                 })
             return formatted_matches, None
         else:
@@ -197,7 +233,7 @@ def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
 # 5. INTERFACE PRINCIPALE
 # ==========================================
 st.title("⚽ VIPSTEPH - Match Analyzer API")
-st.markdown("Tableau de bord professionnel connecté en temps réel.")
+st.markdown("Tableau de bord professionnel avec **Moteur de Probabilités de Poisson**.")
 
 matches, error_message = fetch_real_api_data(api_key_input, mode_recherche, target_date, league_choice)
 
@@ -211,14 +247,14 @@ else:
 
 if not matches:
     if api_key_input and not error_message:
-        st.warning(f"ℹ️ Aucun match trouvé pour cette sélection/date via l'API. Voici un exemple basé sur les données réelles :")
+        st.warning(f"ℹ️ Aucun match trouvé pour cette sélection/date via l'API. Voici un exemple avec calcul de Poisson :")
     
     matches = [
         {
             "id": "demo-1", "competition": "Premier League", "country": "England", "status": "1H", "time": "🔴 LIVE 42'",
             "home": {"name": "Arsenal", "logo": "https://media.api-sports.io/football/teams/42.png", "goals": 2},
             "away": {"name": "Manchester City", "logo": "https://media.api-sports.io/football/teams/50.png", "goals": 1},
-            "stats": generate_coherent_analysis("Arsenal", "Manchester City", 2, 1, "1H")
+            "stats": calculate_poisson_analysis("Arsenal", "Manchester City", 2, 1, "1H")
         }
     ]
 
@@ -255,7 +291,7 @@ for match in matches:
         
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.expander(f"📊 Analyses & Pronostics : {match['home']['name']} vs {match['away']['name']}"):
+    with st.expander(f"📊 Analyse Poisson & Pronostics : {match['home']['name']} vs {match['away']['name']}"):
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.markdown(f"""
@@ -267,27 +303,27 @@ for match in matches:
         with c2:
             st.markdown(f"""
                 <div class='stat-box'>
-                    <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>CORNERS ATTENDUS</div>
-                    <div style='font-size: 15px; font-weight: bold;'>{match['stats']['corners_exp']}</div>
+                    <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>PROBABILITÉS 1X2</div>
+                    <div style='font-size: 12px; font-weight: bold;'>{match['stats']['probabilities']}</div>
                 </div>
             """, unsafe_allow_html=True)
         with c3:
-            st.markdown(f"""
-                <div class='stat-box'>
-                    <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>TIRS CADRÉS</div>
-                    <div style='font-size: 15px; font-weight: bold;'>{match['stats']['shots_on_target_exp']}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        with c4:
             st.markdown(f"""
                 <div class='stat-box'>
                     <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>SCORES PROBABLES</div>
                     <div style='font-size: 13px; font-weight: bold; color: #38bdf8;'>{match['stats']['scores'][0]} / {match['stats']['scores'][1]}</div>
                 </div>
             """, unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"""
+                <div class='stat-box'>
+                    <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>TIRS CADRÉS (Est.)</div>
+                    <div style='font-size: 15px; font-weight: bold;'>{match['stats']['shots_on_target_exp']}</div>
+                </div>
+            """, unsafe_allow_html=True)
 
         st.markdown(f"""
             <div style="background-color: #070a0f; border-left: 3px solid #10b981; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px;">
-                💡 <b>Pronostic Recommandé :</b> <span style="color: #10b981;">{match['stats']['rec']}</span>
+                💡 <b>Pronostic Recommandé (Modèle Poisson) :</b> <span style="color: #10b981;">{match['stats']['rec']}</span>
             </div>
         """, unsafe_allow_html=True)
