@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import textwrap
 
 # ==========================================
 # 1. CONFIGURATION & DESIGN PREMIUM
@@ -75,22 +76,14 @@ st.markdown("""
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_api_matches(sport_category):
-    """
-    Connecteur API universel. 
-    Remplace l'URL et les headers par ton fournisseur d'API (ex: API-Football / RapidAPI).
-    """
-    # Exemple de structure connectée à une API réelle ou endpoint dynamique :
-    # url = f"https://v3.football.api-sports.io/fixtures?live=all"
-    # headers = {'x-rapidapi-host': "v3.football.api-sports.io", 'x-rapidapi-key': "TA_CLE_API"}
-    
-    # Données simulées dynamiques structurées exactement comme l'API renverrait les objets :
+    # Données simulées (prêtes à être branchées sur ta vraie API)
     mock_api_data = [
         {
             "id": "101",
             "sport": "Football",
             "competition": "Premier League",
             "country": "Angleterre",
-            "status": "1H", # NS (À venir), 1H/2H (En direct), FT (Terminé)
+            "status": "1H",
             "time": "34'",
             "home": {"name": "Arsenal", "logo": "https://media.api-sports.io/football/teams/42.png", "goals": 1},
             "away": {"name": "Chelsea", "logo": "https://media.api-sports.io/football/teams/49.png", "goals": 0},
@@ -130,7 +123,6 @@ def fetch_api_matches(sport_category):
 st.title("⚽ VIPSTEPH - Match Analyzer API")
 st.markdown("Plateforme professionnelle multi-sports connectée en temps réel.")
 
-# Barre latérale de contrôle
 st.sidebar.header("⚙️ Paramètres & API")
 sport_filter = st.sidebar.selectbox(
     "Filtrer par Sport / Type", 
@@ -138,7 +130,6 @@ sport_filter = st.sidebar.selectbox(
 )
 auto_refresh = st.sidebar.checkbox("Actualisation Automatique (Live)", value=True)
 
-# Bloc gérant l'actualisation dynamique sans recharger toute la page manuellement
 @st.fragment(run_every=15 if auto_refresh else None)
 def render_matches_dashboard(selected_sport):
     matches = fetch_api_matches(selected_sport)
@@ -147,7 +138,7 @@ def render_matches_dashboard(selected_sport):
         st.warning("Aucun match disponible pour le moment via l'API.")
         return
 
-    st.caption(p := f"Dernière synchronisation API : {time.strftime('%H:%M:%S')}")
+    st.caption(f"Dernière synchronisation API : {time.strftime('%H:%M:%S')}")
 
     for match in matches:
         status = match["status"]
@@ -158,8 +149,8 @@ def render_matches_dashboard(selected_sport):
         else:
             status_badge = f"<span class='badge-ns'>⏳ {match['time']}</span>"
 
-        # Affichage de la carte principale du match
-        st.markdown(f"""
+        # Utilisation de textwrap.dedent pour forcer Streamlit à interpréter le HTML correctement
+        card_html = textwrap.dedent(f"""
             <div class='match-card'>
                 <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; text-transform: uppercase; margin-bottom: 12px;">
                     <span><b>{match['competition']}</b> ({match['country']})</span>
@@ -180,45 +171,46 @@ def render_matches_dashboard(selected_sport):
                     </div>
                 </div>
             </div>
-        """, unsafe_allow_html=True)
+        """)
+        
+        st.markdown(card_html, unsafe_allow_html=True)
 
-        # Volet des marchés spécifiques demandés (Corners, Buts, Tirs, Scores exacts, Rec)
+        # Volet des marchés spécifiques
         with st.expander(f"📊 Analyses & Marchés ciblés : {match['home']['name']} vs {match['away']['name']}"):
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.markdown(f"""
+                st.markdown(textwrap.dedent(f"""
                     <div class='stat-box'>
                         <p style='color: #9ca3af; margin-bottom: 2px;'>BUTS ATTENDUS (xG)</p>
                         <p style='font-size: 15px; font-weight: bold; color: #10b981;'>{match['stats']['goals_exp']}</p>
                     </div>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
             with c2:
-                st.markdown(f"""
+                st.markdown(textwrap.dedent(f"""
                     <div class='stat-box'>
                         <p style='color: #9ca3af; margin-bottom: 2px;'>CORNERS ATTENDUS</p>
                         <p style='font-size: 15px; font-weight: bold;'>{match['stats']['corners_exp']}</p>
                     </div>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
             with c3:
-                st.markdown(f"""
+                st.markdown(textwrap.dedent(f"""
                     <div class='stat-box'>
                         <p style='color: #9ca3af; margin-bottom: 2px;'>TIRS CADRÉS ATTENDUS</p>
                         <p style='font-size: 15px; font-weight: bold;'>{match['stats']['shots_on_target_exp']}</p>
                     </div>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
             with c4:
-                st.markdown(f"""
+                st.markdown(textwrap.dedent(f"""
                     <div class='stat-box'>
                         <p style='color: #9ca3af; margin-bottom: 2px;'>2 SCORES EXACTS</p>
                         <p style='font-size: 13px; font-weight: bold; color: #38bdf8;'>{match['stats']['scores'][0]} / {match['stats']['scores'][1]}</p>
                     </div>
-                """, unsafe_allow_html=True)
+                """), unsafe_allow_html=True)
 
-            st.markdown(f"""
+            st.markdown(textwrap.dedent(f"""
                 <div style="background-color: #070a0f; border-left: 3px solid #10b981; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px;">
                     💡 <b>Prédiction Recommandée :</b> <span style="color: #10b981;">{match['stats']['rec']}</span>
                 </div>
-            """, unsafe_allow_html=True)
+            """), unsafe_allow_html=True)
 
-# Lancement du tableau de bord rafraîchissable
 render_matches_dashboard(sport_filter)
