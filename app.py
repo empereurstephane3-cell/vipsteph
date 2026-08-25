@@ -1,7 +1,5 @@
 import streamlit as st
-import requests
 import time
-import textwrap
 
 # ==========================================
 # 1. CONFIGURATION & DESIGN PREMIUM
@@ -13,70 +11,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Style global pour un design sombre épuré
 st.markdown("""
     <style>
-        :root {
-            --bg-main: #090d12;
-            --bg-card: #111822;
-            --border-color: #1f293d;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-        }
-        .stApp { background-color: var(--bg-main); color: var(--text-main); }
-        
-        .match-card {
-            background-color: var(--bg-card);
-            border: 1px solid var(--border-color);
+        .stApp { background-color: #090d12; color: #f3f4f6; }
+        .match-container {
+            background-color: #111822;
+            border: 1px solid #1f293d;
             border-radius: 14px;
-            padding: 18px;
+            padding: 20px;
             margin-bottom: 16px;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
-        .badge-live {
-            background-color: rgba(239, 68, 68, 0.2);
-            color: var(--accent-red);
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            border: 1px solid rgba(239, 68, 68, 0.4);
-        }
-        .badge-ns {
-            background-color: rgba(156, 163, 175, 0.1);
-            color: var(--text-muted);
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-        .badge-ft {
-            background-color: rgba(16, 185, 129, 0.15);
-            color: var(--accent-green);
-            padding: 3px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-        }
         .stat-box {
             background-color: #0d121b;
-            border: 1px solid var(--border-color);
+            border: 1px solid #1f293d;
             border-radius: 10px;
-            padding: 10px;
+            padding: 12px;
             text-align: center;
-            font-size: 12px;
         }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CONNEXION API & RECUPÉRATION DES DONNÉES
+# 2. DONNÉES API (SIMULÉES)
 # ==========================================
 @st.cache_data(ttl=60)
 def fetch_api_matches(sport_category):
-    # Données simulées (prêtes à être branchées sur ta vraie API)
     mock_api_data = [
         {
             "id": "101",
@@ -118,7 +79,7 @@ def fetch_api_matches(sport_category):
     return [m for m in mock_api_data if sport_category.lower() in m["sport"].lower()]
 
 # ==========================================
-# 3. INTERFACE PRINCIPALE & ACTUALISATION LIVE
+# 3. INTERFACE UTILISATEUR
 # ==========================================
 st.title("⚽ VIPSTEPH - Match Analyzer API")
 st.markdown("Plateforme professionnelle multi-sports connectée en temps réel.")
@@ -143,74 +104,83 @@ def render_matches_dashboard(selected_sport):
     for match in matches:
         status = match["status"]
         if status in ["1H", "2H", "HT"]:
-            status_badge = f"<span class='badge-live'>🔴 LIVE {match['time']}</span>"
+            status_text = f"🔴 LIVE {match['time']}"
         elif status == "FT":
-            status_badge = f"<span class='badge-ft'>🏁 TERMINÉ</span>"
+            status_text = "🏁 TERMINÉ"
         else:
-            status_badge = f"<span class='badge-ns'>⏳ {match['time']}</span>"
+            status_text = f"⏳ {match['time']}"
 
-        # Utilisation de textwrap.dedent pour forcer Streamlit à interpréter le HTML correctement
-        card_html = textwrap.dedent(f"""
-            <div class='match-card'>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #9ca3af; text-transform: uppercase; margin-bottom: 12px;">
-                    <span><b>{match['competition']}</b> ({match['country']})</span>
-                    <span>{status_badge}</span>
-                </div>
+        # Utilisation d'un conteneur stylisé natif
+        with st.container():
+            st.markdown('<div class="match-container">', unsafe_allow_html=True)
+            
+            # En-tête du match (Compétition & Statut)
+            col_info1, col_info2 = st.columns([3, 1])
+            with col_info1:
+                st.markdown(f"**{match['competition']}** *({match['country']})*")
+            with col_info2:
+                st.markdown(f"<div style='text-align: right; font-weight: bold; font-size: 12px;'>{status_text}</div>", unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Affichage des équipes et du score au centre
+            col_home, col_score, col_away = st.columns([4, 2, 4])
+            
+            with col_home:
+                c_img, c_name = st.columns([1, 4])
+                with c_img:
+                    st.image(match['home']['logo'], width=28)
+                with c_name:
+                    st.markdown(f"**{match['home']['name']}**")
+                    
+            with col_score:
+                st.markdown(f"<div style='text-align: center; font-family: monospace; font-weight: bold; font-size: 20px; background: #070a0f; padding: 4px; border-radius: 8px; border: 1px solid #1f293d;'>{match['home']['goals']} - {match['away']['goals']}</div>", unsafe_allow_html=True)
                 
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-                    <div style="display: flex; align-items: center; gap: 10px; width: 40%;">
-                        <img src="{match['home']['logo']}" width="28" height="28" style="object-fit: contain;">
-                        <span style="font-weight: 700; font-size: 15px;">{match['home']['name']}</span>
-                    </div>
-                    <div style="font-family: monospace; font-weight: bold; font-size: 18px; background: #070a0f; padding: 4px 14px; border-radius: 8px; border: 1px solid #1f293d;">
-                        {match['home']['goals']} - {match['away']['goals']}
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; width: 40%;">
-                        <span style="font-weight: 700; font-size: 15px; text-align: right;">{match['away']['name']}</span>
-                        <img src="{match['away']['logo']}" width="28" height="28" style="object-fit: contain;">
-                    </div>
-                </div>
-            </div>
-        """)
-        
-        st.markdown(card_html, unsafe_allow_html=True)
+            with col_away:
+                c_name, c_img = st.columns([4, 1])
+                with c_name:
+                    st.markdown(f"<div style='text-align: right;'><b>{match['away']['name']}</b></div>", unsafe_allow_html=True)
+                with c_img:
+                    st.image(match['away']['logo'], width=28)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        # Volet des marchés spécifiques
+        # Volet d'analyses et marchés ciblés
         with st.expander(f"📊 Analyses & Marchés ciblés : {match['home']['name']} vs {match['away']['name']}"):
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.markdown(textwrap.dedent(f"""
+                st.markdown(f"""
                     <div class='stat-box'>
-                        <p style='color: #9ca3af; margin-bottom: 2px;'>BUTS ATTENDUS (xG)</p>
-                        <p style='font-size: 15px; font-weight: bold; color: #10b981;'>{match['stats']['goals_exp']}</p>
+                        <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>BUTS ATTENDUS (xG)</div>
+                        <div style='font-size: 15px; font-weight: bold; color: #10b981;'>{match['stats']['goals_exp']}</div>
                     </div>
-                """), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             with c2:
-                st.markdown(textwrap.dedent(f"""
+                st.markdown(f"""
                     <div class='stat-box'>
-                        <p style='color: #9ca3af; margin-bottom: 2px;'>CORNERS ATTENDUS</p>
-                        <p style='font-size: 15px; font-weight: bold;'>{match['stats']['corners_exp']}</p>
+                        <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>CORNERS ATTENDUS</div>
+                        <div style='font-size: 15px; font-weight: bold;'>{match['stats']['corners_exp']}</div>
                     </div>
-                """), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             with c3:
-                st.markdown(textwrap.dedent(f"""
+                st.markdown(f"""
                     <div class='stat-box'>
-                        <p style='color: #9ca3af; margin-bottom: 2px;'>TIRS CADRÉS ATTENDUS</p>
-                        <p style='font-size: 15px; font-weight: bold;'>{match['stats']['shots_on_target_exp']}</p>
+                        <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>TIRS CADRÉS</div>
+                        <div style='font-size: 15px; font-weight: bold;'>{match['stats']['shots_on_target_exp']}</div>
                     </div>
-                """), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
             with c4:
-                st.markdown(textwrap.dedent(f"""
+                st.markdown(f"""
                     <div class='stat-box'>
-                        <p style='color: #9ca3af; margin-bottom: 2px;'>2 SCORES EXACTS</p>
-                        <p style='font-size: 13px; font-weight: bold; color: #38bdf8;'>{match['stats']['scores'][0]} / {match['stats']['scores'][1]}</p>
+                        <div style='color: #9ca3af; font-size: 11px; margin-bottom: 2px;'>2 SCORES EXACTS</div>
+                        <div style='font-size: 13px; font-weight: bold; color: #38bdf8;'>{match['stats']['scores'][0]} / {match['stats']['scores'][1]}</div>
                     </div>
-                """), unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
-            st.markdown(textwrap.dedent(f"""
+            st.markdown(f"""
                 <div style="background-color: #070a0f; border-left: 3px solid #10b981; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px;">
                     💡 <b>Prédiction Recommandée :</b> <span style="color: #10b981;">{match['stats']['rec']}</span>
                 </div>
-            """), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 render_matches_dashboard(sport_filter)
