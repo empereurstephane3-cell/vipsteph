@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CONFIGURATION DE LA BARRE LATÉRALE & API
+# 2. BARRE LATÉRALE & CONFIGURATION
 # ==========================================
 st.sidebar.header("⚙️ Configuration API")
 api_key_input = st.sidebar.text_input("Clé API (API-Sports / API-Football)", type="password", placeholder="Entre ta clé ici...")
@@ -64,7 +64,7 @@ LEAGUE_IDS = {
 }
 
 # ==========================================
-# 3. FONCTION DE CONNEXION API
+# 3. FONCTION API (CORrigée)
 # ==========================================
 def fetch_real_api_data(api_key, selected_league):
     if not api_key:
@@ -73,12 +73,14 @@ def fetch_real_api_data(api_key, selected_league):
     today = datetime.now().strftime('%Y-%m-%d')
     url = "https://v3.football.api-sports.io/fixtures"
     
-    params = {"date": today}
-    if selected_league != "Tous les Matchs Live du Jour" and selected_league in LEAGUE_IDS:
-        params["league"] = LEAGUE_IDS[selected_league]
-        params["season"] = 2026
+    # Correction du conflit date / live
+    if selected_league == "Tous les Matchs Live du Jour":
+        params = {"live": "all"}
     else:
-        params["live"] = "all"
+        params = {"date": today}
+        if selected_league in LEAGUE_IDS:
+            params["league"] = LEAGUE_IDS[selected_league]
+            params["season"] = 2026
 
     headers = {
         'x-rapidapi-host': "v3.football.api-sports.io",
@@ -88,16 +90,18 @@ def fetch_real_api_data(api_key, selected_league):
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         
-        # Vérification du statut HTTP
         if response.status_code == 200:
             json_data = response.json()
-            data = json_data.get("response", [])
             
-            # S'il y a un message d'erreur de quota dans le JSON de l'API
             if "errors" in json_data and json_data["errors"]:
-                return None, f"Erreur API-Sports : {json_data['errors']}"
+                err_msg = json_data["errors"]
+                if isinstance(err_msg, dict):
+                    err_msg = ", ".join([f"{k}: {v}" for k, v in err_msg.items()])
+                return None, f"Erreur API-Sports : {err_msg}"
                 
+            data = json_data.get("response", [])
             formatted_matches = []
+            
             for item in data:
                 fixture = item["fixture"]
                 league = item["league"]
@@ -142,7 +146,7 @@ def fetch_real_api_data(api_key, selected_league):
         else:
             return None, f"Erreur HTTP {response.status_code} : Vérifie ta clé API."
     except Exception as e:
-        return None, f"Erreur de connexion réseau : {e}"
+        return None, f"Erreur réseau : {e}"
 
 # ==========================================
 # 4. INTERFACE PRINCIPALE
@@ -150,24 +154,20 @@ def fetch_real_api_data(api_key, selected_league):
 st.title("⚽ VIPSTEPH - Match Analyzer API")
 st.markdown("Tableau de bord professionnel connecté en temps réel.")
 
-# Appel de l'API
 matches, error_message = fetch_real_api_data(api_key_input, league_choice)
 
-# Affichage des statuts de connexion
 if api_key_input:
     if error_message:
         st.error(error_message)
     else:
-        st.success("✅ Clé API valide et connectée avec succès au serveur !")
+        st.success("✅ Clé API valide et connectée avec succès !")
 else:
     st.info("💡 Entre ta clé API dans la barre latérale pour récupérer les données en direct.")
 
-# Gestion si aucun match n'est retourné par l'API pour aujourd'hui
 if not matches:
     if api_key_input and not error_message:
-        st.warning(f"ℹ️ Aucun match trouvé pour **'{league_choice}'** à la date d'aujourd'hui. (C'est normal s'il n'y a pas de rencontre programmée ce jour-là). Voici des exemples pour tester l'affichage :")
+        st.warning(f"ℹ️ Aucun match trouvé pour **'{league_choice}'** aujourd'hui. Affichage des matchs de démonstration :")
     
-    # Données de secours pour ne pas laisser l'écran vide
     matches = [
         {
             "id": "demo-1", "competition": "Premier League (Démo)", "country": "England", "status": "1H", "time": "🔴 LIVE 42'",
@@ -183,7 +183,6 @@ if not matches:
         }
     ]
 
-# Affichage des cartes de match
 for match in matches:
     with st.container():
         st.markdown('<div class="match-container">', unsafe_allow_html=True)
@@ -217,7 +216,6 @@ for match in matches:
         
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Volet des marchés ciblés
     with st.expander(f"📊 Analyses & Marchés ciblés : {match['home']['name']} vs {match['away']['name']}"):
         c1, c2, c3, c4 = st.columns(4)
         with c1:
