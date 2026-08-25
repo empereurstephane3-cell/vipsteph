@@ -70,12 +70,11 @@ SPORT_CONFIGS = {
             "KHL (Russie/Europe)": 10
         }
     },
-    "🎾 Tennis": {
-        "host": "v1.tennis.api-sports.io",
-        "endpoint": "games",
+    "🎾 Tennis (Mode Analytique / Simulé)": {
+        "host": None, # Géré localement car pas d'API officielle Tennis chez API-Sports
+        "endpoint": "tennis_sim",
         "leagues": {
-            "Grand Chelem & ATP": None,
-            "ATP Tour / Masters": 1,
+            "ATP Tour & Grand Chelem": 1,
             "WTA Tour": 2
         }
     },
@@ -113,7 +112,17 @@ target_date = st.sidebar.date_input("Date cible", value=today)
 # 4. MOTEUR STATISTIQUE POLYVALENT (FALLBACK)
 # ==========================================
 def calculate_generic_stats(home_name, away_name, sport):
-    if "Basketball" in sport or "Virtuels" in sport:
+    if "Tennis" in sport:
+        sets_h = random.choice([2, 3])
+        sets_a = 2 if sets_h == 3 else random.choice([0, 1])
+        hw = round(random.uniform(45.0, 75.0), 1)
+        aw = round(100.0 - hw, 1)
+        return {
+            "main_stat": f"Sets : {sets_h} - {sets_a} (Estimé ATP/WTA)",
+            "probabilities": f"Victoire {home_name}: {hw}% | Victoire {away_name}: {aw}%",
+            "rec": f"Tendance : Avantage logique pour {home_name if hw > aw else away_name}"
+        }
+    elif "Basketball" in sport or "Virtuels" in sport:
         score_h = random.randint(85, 115)
         score_a = random.randint(82, 112)
         hw = round(random.uniform(45.0, 65.0), 1)
@@ -139,21 +148,26 @@ def calculate_generic_stats(home_name, away_name, sport):
 def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
     conf = SPORT_CONFIGS[sport_name]
     
+    # Gestion des sports simulés (Tennis et Jeux Virtuels) sans bloquer l'API
     if conf["host"] is None:
-        virtual_matches = []
-        teams_pool = [("Team Viper", "Team Phoenix"), ("Cyber Titans", "Alpha Gaming"), ("Storm eSports", "Nova Squad"), ("Apex Virtual", "Zenith Club")]
-        for idx, (h, a) in enumerate(teams_pool):
-            virtual_matches.append({
-                "id": f"virt-{idx}",
+        sim_matches = []
+        if "Tennis" in sport_name:
+            pairs = [("J. Sinner", "C. Alcaraz"), ("N. Djokovic", "A. Zverev"), ("I. Swiatek", "A. Sabalenka"), ("C. Gauff", "E. Rybakina")]
+        else:
+            pairs = [("Team Viper", "Team Phoenix"), ("Cyber Titans", "Alpha Gaming"), ("Storm eSports", "Nova Squad"), ("Apex Virtual", "Zenith Club")]
+            
+        for idx, (h, a) in enumerate(pairs):
+            sim_matches.append({
+                "id": f"sim-{idx}",
                 "competition": selected_league_name,
-                "country": "Virtuel",
+                "country": "International" if "Tennis" in sport_name else "Virtuel",
                 "status": "NS",
-                "time": f"🎮 LIVE Virtuel {idx+1}",
-                "home": {"name": h, "logo": "https://img.icons8.com/color/48/controller.png", "goals": random.randint(0, 3)},
-                "away": {"name": a, "logo": "https://img.icons8.com/color/48/controller.png", "goals": random.randint(0, 3)},
+                "time": "🔴 LIVE" if mode == "🔴 Matchs en direct (Live)" else "⏳ 15:00",
+                "home": {"name": h, "logo": "", "goals": random.randint(0, 2) if "Tennis" not in sport_name else random.randint(0, 3)},
+                "away": {"name": a, "logo": "", "goals": random.randint(0, 2) if "Tennis" not in sport_name else random.randint(0, 3)},
                 "stats": calculate_generic_stats(h, a, sport_name)
             })
-        return virtual_matches, None
+        return sim_matches, None
 
     if not api_key:
         return None, "⚠️ Aucune clé API saisie."
@@ -186,7 +200,6 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
                 if not isinstance(item, dict):
                     continue
                 
-                # Extraction sécurisée des sous-objets
                 fixture = item.get("fixture", item.get("game", {}))
                 if not isinstance(fixture, dict): fixture = {}
                 
@@ -202,16 +215,14 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
                 if not isinstance(status_info, dict): status_info = {}
                 status_short = status_info.get("short", "NS")
                 
-                # Extraction sécurisée des équipes (gère si c'est un dict ou autre)
                 home_data = teams.get("home", {})
                 away_data = teams.get("away", {})
                 
                 h_name = home_data.get("name", "Domicile") if isinstance(home_data, dict) else str(home_data)
                 a_name = away_data.get("name", "Extérieur") if isinstance(away_data, dict) else str(away_data)
                 h_logo = home_data.get("logo", "") if isinstance(home_data, dict) else ""
-                a_logo = away_data.get("logo", "") if isinstance(away_data, dict) else ""
+                a_logo = away_data.get("logo", "") if isinstance(home_data, dict) else ""
                 
-                # Extraction sécurisée des scores
                 h_g, a_g = 0, 0
                 if isinstance(scores, dict):
                     h_score_obj = scores.get("home", 0)
@@ -249,13 +260,13 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
 # 6. INTERFACE UTILISATEUR PRINCIPALE
 # ==========================================
 st.title(f"🏆 VIPSTEPH - Hub {selected_sport_name}")
-st.markdown(f"Analyse ciblée des **Grands Championnats** et **Jeux Virtuels** (Sécurisé anti-crash).")
+st.markdown(f"Analyse ciblée des **Grands Championnats** (Protection anti-crash active).")
 
 matches, error_message = fetch_multisport_data(api_key_input, selected_sport_name, selected_league_id, target_date, mode_recherche)
 
 if error_message:
     st.error(error_message)
-elif api_key_input or "Virtuels" in selected_sport_name:
+elif api_key_input or conf["host"] is None:
     st.success("✅ Données synchronisées avec succès !")
 else:
     st.info("💡 Entre ta clé API dans la barre latérale pour charger les rencontres.")
@@ -264,9 +275,9 @@ if not matches:
     matches = [
         {
             "id": "demo-ms", "competition": selected_league_name, "country": "Global", "status": "NS", "time": "⏳ 20:00",
-            "home": {"name": "Équipe Domicile (Démo)", "logo": "", "goals": 0},
-            "away": {"name": "Équipe Extérieur (Démo)", "logo": "", "goals": 0},
-            "stats": calculate_generic_stats("Équipe Domicile", "Équipe Extérieur", selected_sport_name)
+            "home": {"name": "Joueur A (Démo)", "logo": "", "goals": 0},
+            "away": {"name": "Joueur B (Démo)", "logo": "", "goals": 0},
+            "stats": calculate_generic_stats("Joueur A", "Joueur B", selected_sport_name)
         }
     ]
 
