@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 import math
+import time
 
 # ==========================================
 # 1. CONFIGURATION & DESIGN PREMIUM
@@ -81,11 +82,10 @@ LEAGUE_IDS = {
 }
 
 # ==========================================
-# 3. RÉCUPÉRATION DES PRÉDICTIONS OFFICIELLES API
+# 3. RÉCUPÉRATION DES PRÉDICTIONS API AVEC GESTION DU RATE LIMIT
 # ==========================================
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=3600)
 def fetch_api_predictions(api_key, fixture_id):
-    """Interroge l'endpoint officiel /predictions de l'API pour un match à venir"""
     if not api_key or str(fixture_id).startswith("demo"):
         return None
     
@@ -98,6 +98,8 @@ def fetch_api_predictions(api_key, fixture_id):
     
     try:
         response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 429:
+            return "RATE_LIMIT"
         if response.status_code == 200:
             data = response.json().get("response", [])
             if data:
@@ -107,7 +109,7 @@ def fetch_api_predictions(api_key, fixture_id):
     return None
 
 # ==========================================
-# 4. MOTEUR POISSON TEMPOREL (POUR LE LIVE)
+# 4. MOTEUR POISSON TEMPOREL (FALLBACK SOLIDE)
 # ==========================================
 def poisson_pmf(lmbda, k):
     if lmbda <= 0:
@@ -145,15 +147,13 @@ def calculate_robust_poisson(home_name, away_name, h_goals, a_goals, status_shor
             if (h + a) > 2.5: over_25_prob += p_score
 
     score_probabilities.sort(key=lambda x: x[1], reverse=True)
-    
     hw_pct, dr_pct, aw_pct = round(home_win_prob * 100, 1), round(draw_prob * 100, 1), round(away_win_prob * 100, 1)
 
     return {
         "goals_exp": round(lambda_home + lambda_away, 2),
         "scores": [f"{score_probabilities[0][0][0]} - {score_probabilities[0][0][1]}", f"{score_probabilities[1][0][0]} - {score_probabilities[1][0][1]}"],
-        "rec": f"En direct - Tendance : Victoire 1 ({hw_pct}%) ou Nul ({dr_pct}%)",
-        "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%",
-        "source": "Modèle Poisson Live"
+        "rec": f"Tendance : Victoire 1 ({hw_pct}%) ou Nul ({dr_pct}%)",
+        "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%"
     }
 
 # ==========================================
@@ -178,6 +178,8 @@ def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
 
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
+        if response.status_code == 429:
+            return None, "Erreur API-Sports : Limite de requêtes atteinte (10/min max sur le plan gratuit). Patiente quelques secondes."
         if response.status_code == 200:
             json_data = response.json()
             if "errors" in json_data and json_data["errors"]:
@@ -230,7 +232,7 @@ def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
 # 6. INTERFACE PRINCIPALE
 # ==========================================
 st.title("⚽ VIPSTEPH - Match Analyzer API")
-st.markdown("Tableau de bord combinant **Données Officielles API (Pre-match)** et **Modèle Poisson (Live)**.")
+st.markdown("Tableau de bord combinant **Données API** et **Modèle de Sécurité (Anti-Rate Limit)**.")
 
 matches, error_message = fetch_real_api_data(api_key_input, mode_recherche, target_date, league_choice)
 
@@ -278,16 +280,20 @@ for match in matches:
             with c_img: st.image(match['away']['logo'], width=28)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Expander dynamique : Utilise l'API officielle si le match n'a pas encore commencé (NS), sinon utilise Poisson
     with st.expander(f"📊 Analyse & Prédictions : {match['home']['name']} vs {match['away']['name']}"):
         
         official_data = None
         if match['status'] == "NS":
-            with st.spinner("Récupération des prédictions officielles de l'API..."):
+            with st.spinner("Récupération des prédictions de l'API..."):
                 official_data = fetch_api_predictions(api_key_input, match['id'])
+                # Petite pause pour éviter de saturer l'API gratuite si on ouvre plusieurs expanders d'affilée
+                time.sleep(0.5)
+
+        if official_data == "RATE_LIMIT":
+            st.warning("⚠️ Limite de l'API atteinte (10 req/min). Basculement automatique sur l'analyse statistique locale :")
+            official_data = None # Force le passage au bloc de secours ci-dessous
 
         if official_data:
-            # Affichage des données officielles de l'API pour les matchs à venir
             pred = official_data.get("predictions", {})
             winner = pred.get("winner", {})
             percent = pred.get("percent", {})
@@ -325,8 +331,7 @@ for match in matches:
             """, unsafe_allow_html=True)
 
         else:
-            # Fallback sur le calcul de Poisson (pour le Live ou si l'API ne renvoie rien)
-            st.markdown(f"<div style='color: #10b981; font-size: 12px; font-weight: bold; margin-bottom: 8px;'>📌 Source : Modèle Statistique (Poisson / Live)</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='color: #10b981; font-size: 12px; font-weight: bold; margin-bottom: 8px;'>📌 Source : Modèle Statistique / Alternatif</div>", unsafe_allow_html=True)
             
             c1, c2, c3 = st.columns(3)
             with c1:
