@@ -80,7 +80,7 @@ SPORT_CONFIGS = {
         }
     },
     "🎮 Jeux Virtuels (E-Foot / Esport)": {
-        "host": None, # Mode simulation haut débit sécurisé
+        "host": None,
         "endpoint": "virtual",
         "leagues": {
             "e-Football Pro League": 999,
@@ -120,27 +120,25 @@ def calculate_generic_stats(home_name, away_name, sport):
         aw = round(100.0 - hw, 1)
         return {
             "main_stat": f"{score_h} - {score_a} (Points estimés)",
-            "probabilities": "1 (Domicile): {}% | 2 (Extérieur): {}%".format(hw, aw),
+            "probabilities": f"1 (Domicile): {hw}% | 2 (Extérieur): {aw}%",
             "rec": f"Tendance : Avantage {home_name if hw > aw else away_name}"
         }
     else:
-        # Modèle Poisson standard pour Football / Hockey
         h_lambda, a_lambda = 1.5, 1.1
         hw_pct, dr_pct, aw_pct = 48.0, 26.0, 26.0
         return {
             "main_stat": f"Buts attendus (xG) : {round(h_lambda + a_lambda, 2)}",
             "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%",
-            "rec": f"Pronostic Sécurisé : Double chance 1X ou Buts"
+            "rec": "Pronostic Sécurisé : Double chance 1X ou Buts"
         }
 
 # ==========================================
-# 5. RÉCUPÉRATION DES DONNÉES MULTI-SPORTS API
+# 5. RÉCUPÉRATION SÉCURISÉE DES DONNÉES API
 # ==========================================
 @st.cache_data(ttl=1800)
 def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
     conf = SPORT_CONFIGS[sport_name]
     
-    # Gestion spécifique des Jeux Virtuels (Simulation locale ultra-rapide sans consommer l'API)
     if conf["host"] is None:
         virtual_matches = []
         teams_pool = [("Team Viper", "Team Phoenix"), ("Cyber Titans", "Alpha Gaming"), ("Storm eSports", "Nova Squad"), ("Apex Virtual", "Zenith Club")]
@@ -184,34 +182,59 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
             data = json_data.get("response", [])
             formatted = []
             
-            for item in data[:15]: # Limité à 15 matchs pour garder l'app ultra fluide
-                # Extraction adaptée selon la structure de l'API du sport
+            for item in data[:15]:
+                if not isinstance(item, dict):
+                    continue
+                
+                # Extraction sécurisée des sous-objets
                 fixture = item.get("fixture", item.get("game", {}))
+                if not isinstance(fixture, dict): fixture = {}
+                
                 league = item.get("league", {})
-                teams = item.get("teams", item.get("teams", {}))
+                if not isinstance(league, dict): league = {}
+                
+                teams = item.get("teams", {})
+                if not isinstance(teams, dict): teams = {}
+                
                 scores = item.get("scores", item.get("goals", {}))
                 
                 status_info = fixture.get("status", {})
+                if not isinstance(status_info, dict): status_info = {}
                 status_short = status_info.get("short", "NS")
                 
-                h_name = teams.get("home", {}).get("name", "Domicile")
-                a_name = teams.get("away", {}).get("name", "Extérieur")
-                h_logo = teams.get("home", {}).get("logo", "")
-                a_logo = teams.get("away", {}).get("logo", "")
+                # Extraction sécurisée des équipes (gère si c'est un dict ou autre)
+                home_data = teams.get("home", {})
+                away_data = teams.get("away", {})
                 
-                # Scores sécurisés
-                h_g = 0
-                a_g = 0
+                h_name = home_data.get("name", "Domicile") if isinstance(home_data, dict) else str(home_data)
+                a_name = away_data.get("name", "Extérieur") if isinstance(away_data, dict) else str(away_data)
+                h_logo = home_data.get("logo", "") if isinstance(home_data, dict) else ""
+                a_logo = away_data.get("logo", "") if isinstance(away_data, dict) else ""
+                
+                # Extraction sécurisée des scores
+                h_g, a_g = 0, 0
                 if isinstance(scores, dict):
-                    h_g = scores.get("home", {}).get("total", 0) or 0
-                    a_g = scores.get("away", {}).get("total", 0) or 0
+                    h_score_obj = scores.get("home", 0)
+                    a_score_obj = scores.get("away", 0)
+                    
+                    if isinstance(h_score_obj, dict):
+                        h_g = h_score_obj.get("total", 0) or 0
+                    elif isinstance(h_score_obj, (int, float)):
+                        h_g = int(h_score_obj)
+                        
+                    if isinstance(a_score_obj, dict):
+                        a_g = a_score_obj.get("total", 0) or 0
+                    elif isinstance(a_score_obj, (int, float)):
+                        a_g = int(a_score_obj)
+                elif isinstance(scores, (int, float)):
+                    h_g = int(scores)
 
                 formatted.append({
                     "id": str(fixture.get("id", "0")),
                     "competition": league.get("name", selected_league_name),
                     "country": league.get("country", "International"),
                     "status": status_short,
-                    "time": f"🔴 LIVE" if status_short in ["LIVE", "1H", "2H", "Q1", "Q2"] else "⏳ Prévu",
+                    "time": "🔴 LIVE" if status_short in ["LIVE", "1H", "2H", "Q1", "Q2", "FT"] else "⏳ Prévu",
                     "home": {"name": h_name, "logo": h_logo, "goals": h_g},
                     "away": {"name": a_name, "logo": a_logo, "goals": a_g},
                     "stats": calculate_generic_stats(h_name, a_name, sport_name)
@@ -226,7 +249,7 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
 # 6. INTERFACE UTILISATEUR PRINCIPALE
 # ==========================================
 st.title(f"🏆 VIPSTEPH - Hub {selected_sport_name}")
-st.markdown(f"Analyse ciblée des **Grands Championnats** et **Jeux Virtuels** (Protection anti-rate limit active).")
+st.markdown(f"Analyse ciblée des **Grands Championnats** et **Jeux Virtuels** (Sécurisé anti-crash).")
 
 matches, error_message = fetch_multisport_data(api_key_input, selected_sport_name, selected_league_id, target_date, mode_recherche)
 
@@ -237,7 +260,6 @@ elif api_key_input or "Virtuels" in selected_sport_name:
 else:
     st.info("💡 Entre ta clé API dans la barre latérale pour charger les rencontres.")
 
-# Démo de secours si aucun match retourné
 if not matches:
     matches = [
         {
