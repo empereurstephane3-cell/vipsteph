@@ -34,17 +34,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. BARRE LATÉRALE & CONFIGURATION
+# 2. BARRE LATÉRALE & CHOIX DE LA DATE
 # ==========================================
 st.sidebar.header("⚙️ Configuration API")
 api_key_input = st.sidebar.text_input("Clé API (API-Sports / API-Football)", type="password", placeholder="Entre ta clé ici...")
 
 st.sidebar.markdown("---")
-st.sidebar.header("🌍 Championnats & Sports")
+st.sidebar.header("📅 Sélection du mode & des dates")
+
+mode_recherche = st.sidebar.radio("Mode de consultation", ["🔴 Matchs en direct (Live)", "📅 Choisir une date spécifique"])
+
+target_date = datetime.now()
+if mode_recherche == "📅 Choisir une date spécifique":
+    target_date = st.sidebar.date_input("Date des matchs", value=datetime.now())
+
 league_choice = st.sidebar.selectbox(
     "Sélectionner la Compétition", 
     [
-        "Tous les Matchs Live du Jour",
+        "Tous les Championnats",
         "Premier League (Angleterre)",
         "La Liga (Espagne)",
         "Serie A (Italie)",
@@ -64,23 +71,20 @@ LEAGUE_IDS = {
 }
 
 # ==========================================
-# 3. FONCTION API (CORrigée)
+# 3. FONCTION API AVEC DATE PERSONNALISÉE
 # ==========================================
-def fetch_real_api_data(api_key, selected_league):
+def fetch_real_api_data(api_key, mode, chosen_date, selected_league):
     if not api_key:
         return None, "⚠️ Aucune clé API saisie."
     
-    today = datetime.now().strftime('%Y-%m-%d')
     url = "https://v3.football.api-sports.io/fixtures"
     
-    # Correction du conflit date / live
-    if selected_league == "Tous les Matchs Live du Jour":
+    if mode == "🔴 Matchs en direct (Live)":
         params = {"live": "all"}
     else:
-        params = {"date": today}
-        if selected_league in LEAGUE_IDS:
+        params = {"date": chosen_date.strftime('%Y-%m-%d')}
+        if selected_league != "Tous les Championnats" and selected_league in LEAGUE_IDS:
             params["league"] = LEAGUE_IDS[selected_league]
-            params["season"] = 2026
 
     headers = {
         'x-rapidapi-host': "v3.football.api-sports.io",
@@ -154,7 +158,7 @@ def fetch_real_api_data(api_key, selected_league):
 st.title("⚽ VIPSTEPH - Match Analyzer API")
 st.markdown("Tableau de bord professionnel connecté en temps réel.")
 
-matches, error_message = fetch_real_api_data(api_key_input, league_choice)
+matches, error_message = fetch_real_api_data(api_key_input, mode_recherche, target_date, league_choice)
 
 if api_key_input:
     if error_message:
@@ -162,11 +166,11 @@ if api_key_input:
     else:
         st.success("✅ Clé API valide et connectée avec succès !")
 else:
-    st.info("💡 Entre ta clé API dans la barre latérale pour récupérer les données en direct.")
+    st.info("💡 Entre ta clé API dans la barre latérale pour récupérer les données.")
 
 if not matches:
     if api_key_input and not error_message:
-        st.warning(f"ℹ️ Aucun match trouvé pour **'{league_choice}'** aujourd'hui. Affichage des matchs de démonstration :")
+        st.warning(f"ℹ️ Aucun match trouvé pour cette sélection/date. (Note : avec un compte gratuit, les saisons récentes par championnat peuvent être restreintes). Voici des exemples de démonstration :")
     
     matches = [
         {
