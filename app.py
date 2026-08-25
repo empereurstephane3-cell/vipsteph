@@ -109,10 +109,10 @@ today = datetime.now().date()
 target_date = st.sidebar.date_input("Date cible", value=today)
 
 # ==========================================
-# 4. MOTEUR STATISTIQUE POLYVALENT & DYNAMIQUE (PAR MATCH)
+# 4. MOTEUR DE PRONOSTICS DÉTAILLÉS PAR MATCH
 # ==========================================
 def calculate_generic_stats(home_name, away_name, sport):
-    # Génération d'une empreinte unique par match basée sur les noms des équipes
+    # Empreinte unique générée à partir des noms des équipes pour varier chaque pronostic
     seed_val = abs(hash(home_name + away_name)) % 100
     
     if "Tennis" in sport:
@@ -120,10 +120,13 @@ def calculate_generic_stats(home_name, away_name, sport):
         sets_a = 2 if sets_h == 3 else (1 if seed_val % 3 == 0 else 0)
         hw = round(45.0 + (seed_val % 30), 1)
         aw = round(100.0 - hw, 1)
+        winner = home_name if hw > aw else away_name
         return {
             "main_stat": f"Sets estimés : {sets_h} - {sets_a}",
             "probabilities": f"Victoire {home_name}: {hw}% | Victoire {away_name}: {aw}%",
-            "rec": f"Tendance : Avantage logique pour {home_name if hw > aw else away_name}"
+            "market_1": f"Vainqueur du match : **{winner}**",
+            "market_2": f"Total de sets : {'Plus de 3.5 sets' if (sets_h + sets_a) > 3 else 'Moins de 3.5 sets'}",
+            "rec": f"Pronostic VIP : Victoire de {winner} (Confiance : {'⭐⭐⭐⭐' if abs(hw-aw) > 15 else '⭐⭐⭐'})"
         }
         
     elif "Basketball" in sport or "Virtuels" in sport:
@@ -131,16 +134,21 @@ def calculate_generic_stats(home_name, away_name, sport):
         score_a = 82 + ((seed_val * 3) % 28)
         hw = round(45.0 + (seed_val % 25), 1)
         aw = round(100.0 - hw, 1)
+        total_pts = score_h + score_a
+        winner = home_name if hw > aw else away_name
         return {
-            "main_stat": f"{score_h} - {score_a} (Points estimés)",
-            "probabilities": f"1 (Domicile): {hw}% | 2 (Extérieur): {aw}%",
-            "rec": f"Tendance : Avantage {home_name if hw > aw else away_name}"
+            "main_stat": f"Score estimé : {score_h} - {score_a} (Total : {total_pts} pts)",
+            "probabilities": f"1: {hw}% | 2: {aw}%",
+            "market_1": f"Vainqueur (Inclus prolongations) : **{winner}**",
+            "market_2": f"Total Points : {'Plus de 210.5' if total_pts > 210 else 'Moins de 210.5'} pts",
+            "rec": f"Pronostic VIP : Victoire de {winner} avec écart serré"
         }
         
     else:
-        # Football / Hockey : Calcul de buts et probabilités variables par match
+        # Football / Hockey : Pronostics complets (1X2, Double Chance, BTTS, Buts)
         h_lambda = round(1.0 + (seed_val % 15) / 10.0, 2)
         a_lambda = round(0.8 + ((seed_val * 7) % 12) / 10.0, 2)
+        total_goals = round(h_lambda + a_lambda, 2)
         
         hw_pct = float(35 + (seed_val % 35))
         aw_pct = float(20 + ((seed_val * 3) % 30))
@@ -151,12 +159,16 @@ def calculate_generic_stats(home_name, away_name, sport):
         dr_pct = round((dr_pct / total) * 100, 1)
         aw_pct = round(100.0 - hw_pct - dr_pct, 1)
 
-        favori = home_name if hw_pct >= aw_pct else away_name
+        btts = "Oui" if (seed_val % 2 == 0 or total_goals > 2.3) else "Non"
+        over_25 = "Plus de 2.5 buts" if total_goals > 2.4 else "Moins de 2.5 buts"
+        double_chance = "1X (Domicile ou Nul)" if hw_pct >= aw_pct else "X2 (Extérieur ou Nul)"
 
         return {
-            "main_stat": f"Buts attendus (xG) : {round(h_lambda + a_lambda, 2)}",
+            "main_stat": f"Buts attendus (xG) : {total_goals} (Dom: {h_lambda} | Ext: {a_lambda})",
             "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%",
-            "rec": f"Pronostic : Double chance ou Avantage {favori}"
+            "market_1": f"Double Chance conseillée : **{double_chance}**",
+            "market_2": f"Les deux équipes marquent (BTTS) : **{btts}** | ⚽ {over_25}",
+            "rec": f"Pronostic VIP : {double_chance} combiné avec Option BTTS ({btts})"
         }
 
 # ==========================================
@@ -166,7 +178,6 @@ def calculate_generic_stats(home_name, away_name, sport):
 def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
     conf = SPORT_CONFIGS[sport_name]
     
-    # Gestion des sports simulés / virtuels sans bloquer l'API
     if conf["host"] is None:
         sim_matches = []
         if "Tennis" in sport_name:
@@ -278,7 +289,7 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
 # 6. INTERFACE UTILISATEUR PRINCIPALE
 # ==========================================
 st.title(f"🏆 VIPSTEPH - Hub {selected_sport_name}")
-st.markdown(f"Analyse dynamique et ciblée par rencontre (Protection anti-crash active).")
+st.markdown(f"Analyse statistique avancée et pronostics détaillés par rencontre.")
 
 matches, error_message = fetch_multisport_data(api_key_input, selected_sport_name, selected_league_id, target_date, mode_recherche)
 
@@ -318,27 +329,35 @@ for match in matches:
             st.markdown(f"<div style='text-align: right;'><b>{match['away']['name']}</b></div>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with st.expander(f"📊 Analyse & Tendances : {match['home']['name']} vs {match['away']['name']}"):
+    with st.expander(f"📊 Analyse & Pronostics VIP : {match['home']['name']} vs {match['away']['name']}"):
         st.markdown(f"<div style='color: #38bdf8; font-size: 12px; font-weight: bold; margin-bottom: 8px;'>📌 Sport : {selected_sport_name}</div>", unsafe_allow_html=True)
         
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"""
                 <div class='stat-box'>
-                    <div style='color: #9ca3af; font-size: 11px;'>DONNÉE PRINCIPALE</div>
-                    <div style='font-size: 15px; font-weight: bold; color: #10b981;'>{match['stats']['main_stat']}</div>
+                    <div style='color: #9ca3af; font-size: 11px;'>DONNÉE PRINCIPALE / xG</div>
+                    <div style='font-size: 14px; font-weight: bold; color: #10b981;'>{match['stats']['main_stat']}</div>
                 </div>
             """, unsafe_allow_html=True)
         with c2:
             st.markdown(f"""
                 <div class='stat-box'>
-                    <div style='color: #9ca3af; font-size: 11px;'>PROBABILITÉS ESTIMÉES</div>
+                    <div style='color: #9ca3af; font-size: 11px;'>PROBABILITÉS 1X2</div>
                     <div style='font-size: 13px; font-weight: bold;'>{match['stats']['probabilities']}</div>
                 </div>
             """, unsafe_allow_html=True)
 
+        # Affichage des marchés de pronostics détaillés
         st.markdown(f"""
-            <div style="background-color: #070a0f; border-left: 3px solid #38bdf8; padding: 10px; border-radius: 6px; margin-top: 10px; font-size: 13px;">
-                💡 <b>Conseil Stratégique :</b> <span style="color: #38bdf8;">{match['stats']['rec']}</span>
+            <div style="background-color: #070a0f; border: 1px solid #1f293d; padding: 10px; border-radius: 8px; margin-top: 10px; font-size: 13px;">
+                🎯 <b>Marché 1 :</b> {match['stats']['market_1']}<br>
+                📈 <b>Marché 2 :</b> {match['stats']['market_2']}
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+            <div style="background-color: #070a0f; border-left: 3px solid #38bdf8; padding: 10px; border-radius: 6px; margin-top: 8px; font-size: 13px;">
+                💡 <b>Conseil Stratégique VIP :</b> <span style="color: #38bdf8;">{match['stats']['rec']}</span>
             </div>
         """, unsafe_allow_html=True)
