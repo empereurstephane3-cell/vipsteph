@@ -71,7 +71,7 @@ SPORT_CONFIGS = {
         }
     },
     "🎾 Tennis (Mode Analytique / Simulé)": {
-        "host": None, # Géré localement car pas d'API officielle Tennis chez API-Sports
+        "host": None, 
         "endpoint": "tennis_sim",
         "leagues": {
             "ATP Tour & Grand Chelem": 1,
@@ -109,36 +109,54 @@ today = datetime.now().date()
 target_date = st.sidebar.date_input("Date cible", value=today)
 
 # ==========================================
-# 4. MOTEUR STATISTIQUE POLYVALENT (FALLBACK)
+# 4. MOTEUR STATISTIQUE POLYVALENT & DYNAMIQUE (PAR MATCH)
 # ==========================================
 def calculate_generic_stats(home_name, away_name, sport):
+    # Génération d'une empreinte unique par match basée sur les noms des équipes
+    seed_val = abs(hash(home_name + away_name)) % 100
+    
     if "Tennis" in sport:
-        sets_h = random.choice([2, 3])
-        sets_a = 2 if sets_h == 3 else random.choice([0, 1])
-        hw = round(random.uniform(45.0, 75.0), 1)
+        sets_h = 2 if seed_val % 2 == 0 else 3
+        sets_a = 2 if sets_h == 3 else (1 if seed_val % 3 == 0 else 0)
+        hw = round(45.0 + (seed_val % 30), 1)
         aw = round(100.0 - hw, 1)
         return {
-            "main_stat": f"Sets : {sets_h} - {sets_a} (Estimé ATP/WTA)",
+            "main_stat": f"Sets estimés : {sets_h} - {sets_a}",
             "probabilities": f"Victoire {home_name}: {hw}% | Victoire {away_name}: {aw}%",
             "rec": f"Tendance : Avantage logique pour {home_name if hw > aw else away_name}"
         }
+        
     elif "Basketball" in sport or "Virtuels" in sport:
-        score_h = random.randint(85, 115)
-        score_a = random.randint(82, 112)
-        hw = round(random.uniform(45.0, 65.0), 1)
+        score_h = 85 + (seed_val % 30)
+        score_a = 82 + ((seed_val * 3) % 28)
+        hw = round(45.0 + (seed_val % 25), 1)
         aw = round(100.0 - hw, 1)
         return {
             "main_stat": f"{score_h} - {score_a} (Points estimés)",
             "probabilities": f"1 (Domicile): {hw}% | 2 (Extérieur): {aw}%",
             "rec": f"Tendance : Avantage {home_name if hw > aw else away_name}"
         }
+        
     else:
-        h_lambda, a_lambda = 1.5, 1.1
-        hw_pct, dr_pct, aw_pct = 48.0, 26.0, 26.0
+        # Football / Hockey : Calcul de buts et probabilités variables par match
+        h_lambda = round(1.0 + (seed_val % 15) / 10.0, 2)
+        a_lambda = round(0.8 + ((seed_val * 7) % 12) / 10.0, 2)
+        
+        hw_pct = float(35 + (seed_val % 35))
+        aw_pct = float(20 + ((seed_val * 3) % 30))
+        dr_pct = float(max(10, 100 - hw_pct - aw_pct))
+        
+        total = hw_pct + dr_pct + aw_pct
+        hw_pct = round((hw_pct / total) * 100, 1)
+        dr_pct = round((dr_pct / total) * 100, 1)
+        aw_pct = round(100.0 - hw_pct - dr_pct, 1)
+
+        favori = home_name if hw_pct >= aw_pct else away_name
+
         return {
             "main_stat": f"Buts attendus (xG) : {round(h_lambda + a_lambda, 2)}",
             "probabilities": f"1: {hw_pct}% | X: {dr_pct}% | 2: {aw_pct}%",
-            "rec": "Pronostic Sécurisé : Double chance 1X ou Buts"
+            "rec": f"Pronostic : Double chance ou Avantage {favori}"
         }
 
 # ==========================================
@@ -148,7 +166,7 @@ def calculate_generic_stats(home_name, away_name, sport):
 def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
     conf = SPORT_CONFIGS[sport_name]
     
-    # Gestion des sports simulés (Tennis et Jeux Virtuels) sans bloquer l'API
+    # Gestion des sports simulés / virtuels sans bloquer l'API
     if conf["host"] is None:
         sim_matches = []
         if "Tennis" in sport_name:
@@ -260,13 +278,13 @@ def fetch_multisport_data(api_key, sport_name, league_id, chosen_date, mode):
 # 6. INTERFACE UTILISATEUR PRINCIPALE
 # ==========================================
 st.title(f"🏆 VIPSTEPH - Hub {selected_sport_name}")
-st.markdown(f"Analyse ciblée des **Grands Championnats** (Protection anti-crash active).")
+st.markdown(f"Analyse dynamique et ciblée par rencontre (Protection anti-crash active).")
 
 matches, error_message = fetch_multisport_data(api_key_input, selected_sport_name, selected_league_id, target_date, mode_recherche)
 
 if error_message:
     st.error(error_message)
-elif api_key_input or conf["host"] is None:
+elif api_key_input or current_sport_conf["host"] is None:
     st.success("✅ Données synchronisées avec succès !")
 else:
     st.info("💡 Entre ta clé API dans la barre latérale pour charger les rencontres.")
@@ -275,9 +293,9 @@ if not matches:
     matches = [
         {
             "id": "demo-ms", "competition": selected_league_name, "country": "Global", "status": "NS", "time": "⏳ 20:00",
-            "home": {"name": "Joueur A (Démo)", "logo": "", "goals": 0},
-            "away": {"name": "Joueur B (Démo)", "logo": "", "goals": 0},
-            "stats": calculate_generic_stats("Joueur A", "Joueur B", selected_sport_name)
+            "home": {"name": "Équipe Alpha (Démo)", "logo": "", "goals": 0},
+            "away": {"name": "Équipe Omega (Démo)", "logo": "", "goals": 0},
+            "stats": calculate_generic_stats("Équipe Alpha", "Équipe Omega", selected_sport_name)
         }
     ]
 
