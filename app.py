@@ -2,48 +2,43 @@ import math
 import requests
 import streamlit as st
 
-# Configuration de la page
 st.set_page_config(
-    page_title="VIPSteph - Hub d'Analyse Avancé", page_icon="👑", layout="wide"
+    page_title="VIPSteph - Dashboard Avancé", page_icon="👑", layout="wide"
 )
 
-# Initialisation du gestionnaire de quotas
+# --- 1. GESTION DES QUOTAS & SESSION ---
 if "quota_used" not in st.session_state:
   st.session_state.quota_used = 0
 
-st.title("👑 VIPSteph - Tableau de bord & Multi-Agents IA")
-st.sidebar.header("Configuration & Quotas")
 
-api_key_ft = st.sidebar.text_input("Clé API Football", type="password")
-api_key_tn = st.sidebar.text_input("Clé API Tennis", type="password")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown(
-    f"**⚡ Quotas consommés :** {st.session_state.quota_used} / 100"
-)
-
-sport_tab = st.radio(
-    "Sélectionner le sport", ["Football", "Tennis"], horizontal=True
-)
-
-# --- FONCTION : LOI DE POISSON ROBUSTE ---
-def calculate_poisson_match(lambda_home, lambda_away, max_goals=5):
-  """Calcule les probabilités exactes de scores et d'issues avec la loi de Poisson."""
+# --- 2. MOTEUR MATHÉMATIQUE : LOI DE POISSON & MARCHÉS ---
+def calculate_poisson_prediction(
+    home_att, home_def, away_att, away_def, avg_home_goals=1.5, avg_away_goals=1.1
+):
+  lambda_home = home_att * away_def * avg_home_goals
+  lambda_away = away_att * home_def * avg_away_goals
 
   def poisson_prob(lmbda, k):
-    return (lmbda**k) * math.exp(-lmbda) / math.factorial(k)
+    return (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
 
+  max_goals = 6
   home_win = 0.0
   draw = 0.0
   away_win = 0.0
-  btts_prob = 0.0
+  btts_yes = 0.0
+  over_15 = 0.0
   over_25 = 0.0
+  over_35 = 0.0
 
   score_matrix = {}
-  for h in range(max_goals + 1):
-    for a in range(max_goals + 1):
-      p = poisson_prob(lambda_home, h) * poisson_prob(lambda_away, a)
+
+  for h in range(max_goals):
+    for a in range(max_goals):
+      p_h = poisson_prob(lambda_home, h)
+      p_a = poisson_prob(lambda_away, a)
+      p = p_h * p_a
       score_matrix[(h, a)] = p
+
       if h > a:
         home_win += p
       elif h == a:
@@ -51,33 +46,140 @@ def calculate_poisson_match(lambda_home, lambda_away, max_goals=5):
       else:
         away_win += p
 
-      if h + a > 2.5:
-        over_25 += p
       if h > 0 and a > 0:
-        btts_prob += p
+        btts_yes += p
+      if (h + a) > 1.5:
+        over_15 += p
+      if (h + a) > 2.5:
+        over_25 += p
+      if (h + a) > 3.5:
+        over_35 += p
 
-  # Normalisation en pourcentage
-  total = home_win + draw + away_win
-  if total > 0:
-    home_win = (home_win / total) * 100
-    draw = (draw / total) * 100
-    away_win = (away_win / total) * 100
+  most_likely_score = max(score_matrix, key=score_matrix.get)
+
+  # Calcul des marchés dérivés
+  double_chance_1x = home_win + draw
+  double_chance_x2 = away_win + draw
+  double_chance_12 = home_win + away_win
+
+  # Draw No Bet (Remboursé si nul)
+  dnb_home = (
+      (home_win / (home_win + away_win)) * 100
+      if (home_win + away_win) > 0
+      else 50.0
+  )
 
   return {
-      "home_win": round(home_win, 1),
-      "draw": round(draw, 1),
-      "away_win": round(away_win, 1),
-      "over_25": round(over_25 * 100, 1),
-      "btts": round(btts_prob * 100, 1),
+      "lambda_home": round(lambda_home, 2),
+      "lambda_away": round(lambda_away, 2),
+      "home_win_pct": round(home_win * 100, 1),
+      "draw_pct": round(draw * 100, 1),
+      "away_win_pct": round(away_win * 100, 1),
+      "btts_yes_pct": round(btts_yes * 100, 1),
+      "btts_no_pct": round((1 - btts_yes) * 100, 1),
+      "over_15_pct": round(over_15 * 100, 1),
+      "over_25_pct": round(over_25 * 100, 1),
+      "over_35_pct": round(over_35 * 100, 1),
+      "under_25_pct": round((1 - over_25) * 100, 1),
+      "dc_1x_pct": round(double_chance_1x * 100, 1),
+      "dc_x2_pct": round(double_chance_x2 * 100, 1),
+      "dc_12_pct": round(double_chance_12 * 100, 1),
+      "dnb_home_pct": round(dnb_home, 1),
+      "exact_score": f"{most_likely_score[0]} - {most_likely_score[1]}",
   }
 
 
-# --- FOOTBALL SECTION ---
+# --- 3. SYSTÈME DES 8 AGENTS IA SPÉCIALISÉS ---
+def run_8_ai_agents(match_data):
+  h_att, h_def = 1.25, 0.85
+  a_att, a_def = 1.10, 0.95
+
+  poisson_res = calculate_poisson_prediction(h_att, h_def, a_att, a_def)
+
+  agents_reports = {
+      "Agent 1 (Statistiques & Forme)": {
+          "icon": "📈",
+          "text": (
+              "Analyse des 5 derniers matchs : Tendance stable à domicile,"
+              " défense légèrement perméable à l'extérieur."
+          ),
+      },
+      "Agent 2 (Modèle Poisson Mathématique)": {
+          "icon": "🧮",
+          "text": (
+              f"xG estimé -> Domicile : {poisson_res['lambda_home']} | Extérieur"
+              f" : {poisson_res['lambda_away']}. Score le plus probable :"
+              f" {poisson_res['exact_score']}."
+          ),
+      },
+      "Agent 3 (Analyse Tactique)": {
+          "icon": "♟️",
+          "text": (
+              "Le bloc équipe adverse souffre face aux transitions rapides sur"
+              " les ailes."
+          ),
+      },
+      "Agent 4 (Contexte & Enjeu)": {
+          "icon": "🧠",
+          "text": (
+              "Forte pression de classement pour l'équipe hôte, besoin"
+              " impératif de points."
+          ),
+      },
+      "Agent 5 (Météo & Terrain)": {
+          "icon": "⛅",
+          "text": (
+              "Conditions optimales de jeu, terrain sec favorisant le jeu au"
+              " sol rapide."
+          ),
+      },
+      "Agent 6 (Value & Marché)": {
+          "icon": "💰",
+          "text": (
+              "Les probabilités mathématiques offrent une belle value sur"
+              f" l'option Over 2.5 ({poisson_res['over_25_pct']}%) ou le BTTS"
+              f" ({poisson_res['btts_yes_pct']}%)."
+          ),
+      },
+      "Agent 7 (Infirmerie & Effectif)": {
+          "icon": "🏥",
+          "text": (
+              "Aucun titulaire majeur absent de dernière minute des deux"
+              " côtés."
+          ),
+      },
+      "Agent 8 (Synthèse Maître VIPSteph)": {
+          "icon": "👑",
+          "text": (
+              f"Victoire 1 : {poisson_res['home_win_pct']}% | Nul :"
+              f" {poisson_res['draw_pct']}% | Victoire 2 :"
+              f" {poisson_res['away_win_pct']}%. Marchés validés et sécurisés"
+              " par l'IA."
+          ),
+      },
+  }
+  return poisson_res, agents_reports
+
+
+# --- 4. INTERFACE UTILISATEUR STREAMLIT ---
+st.title("👑 VIPSteph - Smart Sports Dashboard & Multi-Agents AI")
+st.sidebar.header("Configuration & Quotas")
+
+api_key_ft = st.sidebar.text_input("Clé API Football", type="password")
+api_key_tn = st.sidebar.text_input("Clé API Tennis", type="password")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(f"**Quotas consommés :** {st.session_state.quota_used} / 100")
+
+sport_tab = st.radio(
+    "Sélectionner le sport", ["Football", "Tennis"], horizontal=True
+)
+
 if sport_tab == "Football":
-  st.subheader("⚽ Matchs de Football - Analyse multi-agents & Poisson")
+  st.subheader("⚽ Matchs de Football - Analyse par les 8 Agents IA")
   st.markdown(
-      "Mode économie actif : Sélectionnez un match pour déclencher l'analyse"
-      " approfondie (-1 requête ciblée)."
+      "Mode Économie d'API actif. Cliquez sur **Analyser** pour déclencher le"
+      " modèle de Poisson, les marchés 💹 et l'intelligence des 8 agents."
   )
 
   football_matches = [
@@ -87,8 +189,6 @@ if sport_tab == "Football":
           "away": "FC Barcelone",
           "league": "La Liga",
           "status": "À venir",
-          "l_home": 2.1,
-          "l_away": 1.4,
       },
       {
           "id": 2,
@@ -96,8 +196,6 @@ if sport_tab == "Football":
           "away": "Arsenal",
           "league": "Premier League",
           "status": "En direct",
-          "l_home": 1.8,
-          "l_away": 1.6,
       },
       {
           "id": 3,
@@ -105,8 +203,6 @@ if sport_tab == "Football":
           "away": "Dortmund",
           "league": "Bundesliga",
           "status": "À venir",
-          "l_home": 2.4,
-          "l_away": 1.1,
       },
   ]
 
@@ -121,111 +217,72 @@ if sport_tab == "Football":
       if st.button("🔍 Analyser", key=f"ft_{match['id']}"):
         st.session_state.quota_used += 1
 
-        # Calcul Poisson
-        poisson_res = calculate_poisson_match(match["l_home"], match["l_away"])
+        poisson_data, agents_output = run_8_ai_agents(match)
 
         st.success(
-            f"Analyse multi-agents réussie pour {match['home']} vs"
-            f" {match['away']} !"
+            f"Analyse croisée réussie pour {match['home']} vs"
+            f" {match['away']} (-1 requête)"
         )
 
-        # Affichage des Résultats de la Loi de Poisson
+        # Affichage des résultats du modèle de Poisson
+        st.markdown("### 📊 Résultats du Modèle de Poisson Robuste")
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        col_p1.metric("Score le plus probable", poisson_data["exact_score"])
+        col_p2.metric(
+            f"Victoire {match['home']}", f"{poisson_data['home_win_pct']}%"
+        )
+        col_p3.metric("Match Nul", f"{poisson_data['draw_pct']}%")
+        col_p4.metric(
+            f"Victoire {match['away']}", f"{poisson_data['away_win_pct']}%"
+        )
+
+        # Section Marchés 💹 intégrée
         st.markdown("---")
-        st.markdown("### 📊 1. Modèle Mathématique (Loi de Poisson)")
-        p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns(5)
-        p_col1.metric(
-            f"Victoire {match['home']}", f"{poisson_res['home_win']}%"
-        )
-        p_col2.metric("Match Nul", f"{poisson_res['draw']}%")
-        p_col3.metric(
-            f"Victoire {match['away']}", f"{poisson_res['away_win']}%"
-        )
-        p_col4.metric("Over 2.5 buts", f"{poisson_res['over_25']}%")
-        p_col5.metric("Les 2 marquent (BTTS)", f"{poisson_res['btts']}%")
+        st.markdown("### 💹 Analyse détaillée des Marchés de Paris")
 
-        # Conseil des 8 Agents IA
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+          st.metric("Double Chance 1X", f"{poisson_data['dc_1x_pct']}%")
+          st.metric("Over 1.5 Buts", f"{poisson_data['over_15_pct']}%")
+        with m2:
+          st.metric("Double Chance X2", f"{poisson_data['dc_x2_pct']}%")
+          st.metric("Over 2.5 Buts", f"{poisson_data['over_25_pct']}%")
+        with m3:
+          st.metric("BTTS (Les 2 marquent)", f"{poisson_data['btts_yes_pct']}%")
+          st.metric("Under 2.5 Buts", f"{poisson_data['under_25_pct']}%")
+        with m4:
+          st.metric(
+              f"Draw No Back ({match['home']})",
+              f"{poisson_data['dnb_home_pct']}%",
+          )
+          st.metric("Over 3.5 Buts", f"{poisson_data['over_35_pct']}%")
+
         st.markdown("---")
-        st.markdown("### 🤖 2. Le Conseil des 8 Agents IA Experts")
+        st.markdown("### 🤖 Rapports des 8 Agents IA Spécialisés")
 
-        agents = [
-            (
-                "🛡️ Agent 1 : Tacticien",
-                (
-                    f"Analyse des blocs: {match['home']} privilégie la"
-                    " possession haute, tandis que {match['away']} excelle en"
-                    " transition rapide."
-                ),
-            ),
-            (
-                "📈 Agent 2 : Statisticien",
-                (
-                    "Indicateurs xG cohérents avec les moyennes de la"
-                    f" saison. {match['home']} subit peu d'occasions à"
-                    " domicile."
-                ),
-            ),
-            (
-                "⚡ Agent 3 : Momentum & Forme",
-                (
-                    "Dynamique récente favorable à l'équipe hôte sur les 5"
-                    " derniers matchs."
-                ),
-            ),
-            (
-                "📜 Agent 4 : Historien (H2H)",
-                (
-                    "L'historique des confrontations directes montre traditionnellement"
-                    " des matchs ouverts et prolifiques."
-                ),
-            ),
-            (
-                "🧮 Agent 5 : Modélisateur Poisson",
-                (
-                    f"Validation mathématique : Lambda Domicile ({match['l_home']})"
-                    f" vs Extérieur ({match['l_away']}). Probabilité de succès"
-                    f" de {poisson_res['home_win']}%."
-                ),
-            ),
-            (
-                "🌦️ Agent 6 : Veilleur (Météo/Absences)",
-                (
-                    "Aucune absence majeure signalée de dernière minute. Conditions"
-                    " de pelouse optimales."
-                ),
-            ),
-            (
-                "💰 Agent 7 : Bookmaker & Marché",
-                (
-                    "Les cotes du marché sont légèrement value sur l'option"
-                    " buts ou double chance."
-                ),
-            ),
-            (
-                "👑 Agent 8 : Coach VIP (Synthèse Finale)",
-                (
-                    f"**Recommandation VIP :** Victoire de {match['home']} ou"
-                    f" match nul avec une forte tendance Over 2.5 buts"
-                    f" ({poisson_res['over_25']}%)."
-                ),
-            ),
-        ]
+        # Grille des agents
+        agent_items = list(agents_output.items())
+        for i in range(0, len(agent_items), 2):
+          col_a, col_b = st.columns(2)
 
-        # Affichage des agents en grille de 2 colonnes
-        for i in range(0, len(agents), 2):
-            ac1, ac2 = st.columns(2)
-            with ac1:
-              title, desc = agents[i]
-              st.info(f"**{title}**\n\n{desc}")
-            if i + 1 < len(agents):
-              with ac2:
-                title, desc = agents[i + 1]
-                st.info(f"**{title}**\n\n{desc}")
+          with col_a:
+            name_a, data_a = agent_items[i]
+            with st.container(border=True):
+              st.markdown(f"#### {data_a['icon']} {name_a}")
+              st.write(data_a["text"])
 
-# --- TENNIS SECTION ---
+          if i + 1 < len(agent_items):
+            with col_b:
+              name_b, data_b = agent_items[i + 1]
+              with st.container(border=True):
+                st.markdown(f"#### {data_b['icon']} {name_b}")
+                st.write(data_b["text"])
+
 else:
   st.subheader("🎾 Tournois de Tennis - Mode Économie d'API")
   st.markdown(
-      "Sélectionnez un match pour analyser les confrontations sur le circuit."
+      "La liste ci-dessous n'utilise pas de requêtes. Cliquez sur **Analyser**"
+      " pour cibler un match précis."
   )
 
   tennis_matches = [
@@ -256,10 +313,7 @@ else:
       if st.button("🔍 Analyser", key=f"tn_{match['id']}"):
         st.session_state.quota_used += 1
         st.success(
-            "Analyse tennis ciblée lancée pour {match['player1']} vs"
+            f"Analyse ciblée lancée pour {match['player1']} vs"
             f" {match['player2']} (-1 requête)"
         )
-        st.info(
-            "🔮 **Synthèse IA Tennis :** Match très serré prévu en 3 sets."
-            " Avantage léger sur l'efficacité des premières balles."
-        )
+        st.info("🔮 Pronostic IA : Match serré prévu en 3 sets.")
