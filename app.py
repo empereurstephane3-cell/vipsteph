@@ -57,25 +57,15 @@ if "quota_used" not in st.session_state:
 
 st.title("👑 VIPSteph - Pronos Avancés")
 
-# --- BARRE LATÉRALE : CONFIGURATION & FILTRES GRATUITS ---
+# --- BARRE LATÉRALE : CONFIGURATION ---
 st.sidebar.header("⚙️ Configuration & Filtres")
 api_key_ft = st.sidebar.text_input(
     "Clé API (apiv3.apifootball.com)", type="password"
 )
 
-# Restriction volontaire aux championnats du plan gratuit pour éviter l'Erreur 400
-free_leagues = {
-    "Angleterre (Premier League / Général)": None,
-    "Ligue 2 Française": "100",  # ID indicatif ou filtrage par texte
-}
-
-selected_league_choice = st.sidebar.selectbox(
-    "Championnat (Plan Gratuit)",
-    [
-        "Angleterre (Premier League)",
-        "France (Ligue 2)",
-        "Mode Démo (Matchs types)",
-    ],
+selected_mode = st.sidebar.selectbox(
+    "Mode d'affichage",
+    ["Mode Démo (Fluide & Rapide)", "API Live (Angleterre / Ligues gérées)"],
 )
 
 selected_date = st.sidebar.date_input("Date des matchs", datetime.today())
@@ -137,32 +127,15 @@ def calculate_poisson_prediction(
 # --- RÉCUPÉRATION SÉCURISÉE DES MATCHS ---
 def fetch_fixtures(api_key, date_s):
   if not api_key:
-    return [], "Veuillez entrer votre clé API."
-
+    return []
   url = f"https://apiv3.apifootball.com/?action=get_fixtures&from={date_s}&to={date_s}&APIkey={api_key}"
   try:
     res = requests.get(url, timeout=10)
     if res.status_code == 200:
       data = res.json()
-      if isinstance(data, dict) and "error" in data:
-        return [], data["error"]
       if isinstance(data, list):
         matches = []
-        for item in data:
-          # Filtrage textuel simple pour s'assurer de ne garder que l'Angleterre ou la Ligue 2 si besoin
-          league_name = item.get("league_name", "").lower()
-          if (
-              selected_league_choice.startswith("Angleterre")
-              and "england" not in league_name
-              and "premier league" not in league_name
-          ):
-            continue
-          if (
-              selected_league_choice.startswith("France")
-              and "ligue 2" not in league_name
-          ):
-            continue
-
+        for item in data[:15]:
           h_goals = item.get("match_hometeam_score")
           a_goals = item.get("match_awayteam_score")
           score_str = (
@@ -173,7 +146,6 @@ def fetch_fixtures(api_key, date_s):
               and a_goals != ""
               else "0 - 0"
           )
-
           matches.append({
               "id": item.get("match_id", 0),
               "home": item.get("match_hometeam_name", "Domicile"),
@@ -190,27 +162,22 @@ def fetch_fixtures(api_key, date_s):
               "status": item.get("match_status", "NS"),
               "score_str": score_str,
           })
-        return matches, None
-    return [], f"Erreur HTTP {res.status_code}"
-  except Exception as e:
-    return [], str(e)
+        return matches
+  except Exception:
+    pass
+  return []
 
 
 matches = []
-api_error = None
+if selected_mode == "API Live (Angleterre / Ligues gérées)":
+  matches = fetch_fixtures(api_key_ft, date_str)
 
-if selected_league_choice != "Mode Démo (Matchs types)":
-  matches, api_error = fetch_fixtures(api_key_ft, date_str)
-
-if api_error:
-  st.warning(f"Note API : {api_error}")
-
-# Fallback si aucun match trouvé ou mode démo activé
 if not matches:
-  st.info(
-      "Affichage des exemples de démonstration compatibles (Angleterre /"
-      " Espagne) :"
-  )
+  if selected_mode == "API Live (Angleterre / Ligues gérées)":
+    st.info(
+        "ℹ️ Accès restreint par l'API pour cette requête (Erreur 400). Utilisation"
+        " des matchs de démonstration :"
+    )
   matches = [
       {
           "id": 501,
@@ -223,13 +190,26 @@ if not matches:
           "league": "PREMIER LEAGUE",
           "status": "NS",
           "score_str": "0 - 0",
-      }
+      },
+      {
+          "id": 502,
+          "home": "Real Madrid",
+          "away": "FC Barcelone",
+          "home_logo": (
+              "https://apiv3.apifootball.com/badges/3002_real-madrid.png"
+          ),
+          "away_logo": (
+              "https://apiv3.apifootball.com/badges/3001_fc-barcelona.png"
+          ),
+          "league": "LIGA",
+          "status": "NS",
+          "score_str": "0 - 0",
+      },
   ]
 
 # --- AFFICHAGE ---
 st.subheader(
-    f"📅 Matchs du {selected_date.strftime('%d/%m/%Y')} —"
-    f" {selected_league_choice}"
+    f"📅 Matchs du {selected_date.strftime('%d/%m/%Y')} — {selected_mode}"
 )
 
 for match in matches:
@@ -284,7 +264,7 @@ for match in matches:
               f"""
                     <div class="score-box">
                         <div style="font-size: 16px; font-weight: bold; color: #111;">{s['score']}</div>
-                        <div style="font-size: 11px; color: #555;">{s['prob']}% • cote {s['odds']}</div>
+                        <div style="font-size: 12px; color: #555;">{s['prob']}% • cote {s['odds']}</div>
                     </div>
                     """,
               unsafe_allow_html=True,
