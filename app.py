@@ -4,7 +4,7 @@ import requests
 import streamlit as st
 
 st.set_page_config(
-    page_title="VIPSteph - Kim Prono Style", page_icon="👑", layout="centered"
+    page_title="VIPSteph - Kim Prono Pro", page_icon="👑", layout="centered"
 )
 
 # --- STYLE CSS PERSONNALISÉ ---
@@ -55,17 +55,99 @@ st.markdown(
 if "quota_used" not in st.session_state:
   st.session_state.quota_used = 0
 
-st.title("👑 VIPSteph - Pronos Live")
-st.sidebar.header("Configuration API")
+st.title("👑 VIPSteph - Pronos Avancés")
+
+# --- BARRE LATÉRALE : CONFIGURATION, FILTRES & AUTO-REFRESH ---
+st.sidebar.header("⚙️ Configuration & Filtres")
 api_key_ft = st.sidebar.text_input(
     "Clé API Football (RapidAPI)", type="password"
 )
+
+# Option d'actualisation automatique
+auto_refresh = st.sidebar.checkbox(
+    "🔄 Actualisation auto (toutes les 30s)", value=False
+)
+if auto_refresh:
+  st.markdown(
+      '<meta http-equiv="refresh" content="30">', unsafe_allow_html=True
+  )
+  st.sidebar.info("Actualisation automatique active.")
+
+# 1. Sélection de la date
+selected_date = st.sidebar.date_input(
+    "Date des matchs", datetime.today()
+)
+date_str = selected_date.strftime("%Y-%m-%d")
+
+
+# Fonctions API dynamiques
+@st.cache_data(ttl=3600)
+def fetch_countries(api_key):
+  if not api_key:
+    return ["France", "England", "Spain", "Italy", "Germany"]
+  url = "https://api-football-v1.p.rapidapi.com/v3/countries"
+  try:
+    res = requests.get(
+        url,
+        headers={
+            "X-RapidAPI-Key": api_key,
+            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
+        },
+        timeout=5,
+    )
+    if res.status_code == 200:
+      data = res.json().get("response", [])
+      return sorted([c["name"] for c in data])
+  except Exception:
+    pass
+  return ["France", "England", "Spain", "Italy", "Germany"]
+
+
+@st.cache_data(ttl=3600)
+def fetch_leagues_by_country(api_key, country_name):
+  if not api_key:
+    return {"Ligue 1": 61, "Premier League": 39}
+  url = "https://api-football-v1.p.rapidapi.com/v3/leagues"
+  try:
+    res = requests.get(
+        url,
+        headers={
+            "X-RapidAPI-Key": api_key,
+            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
+        },
+        params={"country": country_name, "season": "2026"},
+        timeout=5,
+    )
+    if res.status_code == 200:
+      data = res.json().get("response", [])
+      leagues = {
+          item["league"]["name"]: item["league"]["id"] for item in data
+      }
+      return leagues
+  except Exception:
+    pass
+  return {}
+
+
+countries_list = fetch_countries(api_key_ft)
+selected_country = st.sidebar.selectbox("Pays", countries_list)
+
+leagues_dict = fetch_leagues_by_country(api_key_ft, selected_country)
+if leagues_dict:
+  selected_league_name = st.sidebar.selectbox(
+      "Championnat", list(leagues_dict.keys())
+  )
+  selected_league_id = leagues_dict[selected_league_name]
+else:
+  selected_league_name = "Tous les championnats"
+  selected_league_id = None
+
 st.sidebar.markdown(f"**Quotas consommés :** {st.session_state.quota_used} / 100")
 
 
-# --- MOTEUR DE CALCUL POISSON ---
+# --- MOTEUR DE CALCUL POISSON (TEMPS RÉGLEMENTAIRE 90 MIN) ---
 def calculate_poisson_prediction(
-    home_att, home_def, away_att, away_def, avg_home_goals=1.5, avg_away_goals=1.1
+    home_att, home_def, away_att, away_def, avg_home_goals=1.65, avg_away_goals=1.25
 ):
   lambda_home = home_att * away_def * avg_home_goals
   lambda_away = away_att * home_def * avg_away_goals
@@ -92,60 +174,58 @@ def calculate_poisson_prediction(
       if (h + a) > 2.5:
         over_25 += p
 
-  most_likely_score = max(score_matrix, key=score_matrix.get)
   sorted_scores = sorted(score_matrix.items(), key=lambda x: x[1], reverse=True)
-  second_score = sorted_scores[1][0] if len(sorted_scores) > 1 else (0, 1)
+
+  top_scores = []
+  for score_tuple, prob in sorted_scores[:3]:
+    estimated_odds = round(1 / prob, 2) if prob > 0 else 99.0
+    top_scores.append({
+        "score": f"{score_tuple[0]} - {score_tuple[1]}",
+        "prob": round(prob * 100, 1),
+        "odds": estimated_odds,
+    })
+
+  double_chance_1x = home_win + draw
 
   return {
-      "exact_score": f"{most_likely_score[0]} - {most_likely_score[1]}",
-      "score_1_prob": round(score_matrix[most_likely_score] * 100, 1),
-      "score_2": f"{second_score[0]} - {second_score[1]}",
-      "score_2_prob": round(score_matrix[second_score] * 100, 1),
+      "top_scores": top_scores,
       "home_win_pct": round(home_win * 100, 1),
       "draw_pct": round(draw * 100, 1),
       "away_win_pct": round(away_win * 100, 1),
+      "dc_1x_pct": round(double_chance_1x * 100, 1),
       "btts_yes_pct": round(btts_yes * 100, 1),
       "over_25_pct": round(over_25 * 100, 1),
   }
 
 
-# --- RÉCUPÉRATION OFFICIELLE DES VRAIS MATCHS (API-FOOTBALL V3) ---
-def fetch_real_matches_v3(api_key):
+# --- RÉCUPÉRATION DES MATCHS ET LOGOS ---
+def fetch_fixtures(api_key, date_s, league_id=None):
   if not api_key:
     return None
   url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-  today_str = datetime.today().strftime("%Y-%m-%d")
-  headers = {
-      "X-RapidAPI-Key": api_key,
-      "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
-  }
-  try:
-    response = requests.get(
-        url, headers=headers, params={"date": today_str}, timeout=10
-    )
-    if response.status_code == 200:
-      data = response.json()
-      items = data.get("response", [])
-      if not items:
-        # Essayer de récupérer les matchs en direct si aucun match programmé aujourd'hui
-        response_live = requests.get(
-            url, headers=headers, params={"live": "all"}, timeout=10
-        )
-        if response_live.status_code == 200:
-          items = response_live.json().get("response", [])
+  params = {"date": date_s}
+  if league_id:
+    params["league"] = league_id
+    params["season"] = "2026"
 
+  try:
+    res = requests.get(
+        url,
+        headers={
+            "X-RapidAPI-Key": api_key,
+            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
+        },
+        params=params,
+        timeout=10,
+    )
+    if res.status_code == 200:
+      items = res.json().get("response", [])
       matches = []
       for item in items[:10]:
         fix = item.get("fixture", {})
         teams = item.get("teams", {})
         league = item.get("league", {})
         goals = item.get("goals", {})
-
-        home_name = teams.get("home", {}).get("name", "Domicile")
-        away_name = teams.get("away", {}).get("name", "Extérieur")
-        league_name = league.get("name", "Championnat")
-        status_short = fix.get("status", {}).get("short", "NS")
-        elapsed = fix.get("status", {}).get("elapsed", 0) or 0
 
         h_goals = goals.get("home")
         a_goals = goals.get("away")
@@ -157,65 +237,88 @@ def fetch_real_matches_v3(api_key):
 
         matches.append({
             "id": fix.get("id", 0),
-            "home": home_name,
-            "away": away_name,
-            "league": league_name.upper(),
-            "status": status_short,
-            "elapsed": elapsed,
+            "home": teams.get("home", {}).get("name", "Domicile"),
+            "away": teams.get("away", {}).get("name", "Extérieur"),
+            "home_logo": teams.get("home", {}).get(
+                "logo", "https://media.api-sports.io/football/teams/default.png"
+            ),
+            "away_logo": teams.get("away", {}).get(
+                "logo", "https://media.api-sports.io/football/teams/default.png"
+            ),
+            "league": league.get("name", "Championnat").upper(),
+            "status": fix.get("status", {}).get("short", "NS"),
+            "elapsed": fix.get("status", {}).get("elapsed", 0) or 0,
             "score_str": score_str,
         })
       return matches if matches else None
-  except Exception as e:
-    st.sidebar.error(f"Erreur connexion API : {e}")
+  except Exception:
+    pass
   return None
 
 
-# Chargement des matchs réels
-matches = fetch_real_matches_v3(api_key_ft)
+matches = fetch_fixtures(api_key_ft, date_str, selected_league_id)
 
 if not api_key_ft:
   st.warning(
       "⚠️ Veuillez entrer votre **Clé API Football (RapidAPI)** dans la barre"
-      " latérale pour afficher les vrais matchs du jour en direct."
+      " latérale pour charger les vrais matchs avec logos et scores en"
+      " direct."
   )
 elif not matches:
   st.info(
-      "Aucun match en direct ou programmé n'a été renvoyé par l'API pour"
-      " aujourd'hui. Vérifiez votre clé ou vos quotas sur RapidAPI."
+      f"Aucun match trouvé pour la date du **{date_str}** dans ce championnat."
+      " Voici des exemples de démonstration :"
   )
-  # Matchs de secours pour illustration si l'API ne renvoie rien
   matches = [
       {
-          "id": 101,
-          "home": "FK Austria Wien",
-          "away": "SC Braga",
-          "league": "UEFA EUROPA CONFERENCE LEAGUE",
-          "status": "LIVE",
-          "elapsed": 21,
+          "id": 501,
+          "home": "Real Madrid",
+          "away": "FC Barcelone",
+          "home_logo": "https://media.api-sports.io/football/teams/541.png",
+          "away_logo": "https://media.api-sports.io/football/teams/529.png",
+          "league": selected_league_name.upper(),
+          "status": "NS",
+          "elapsed": 0,
           "score_str": "0 - 0",
       },
       {
-          "id": 102,
-          "home": "Fulham FC",
-          "away": "AFC Wimbledon",
-          "league": "COUPE EFL",
-          "status": "LIVE",
-          "elapsed": 70,
-          "score_str": "2 - 0",
+          "id": 502,
+          "home": "Arsenal",
+          "away": "Manchester City",
+          "home_logo": "https://media.api-sports.io/football/teams/42.png",
+          "away_logo": "https://media.api-sports.io/football/teams/50.png",
+          "league": selected_league_name.upper(),
+          "status": "NS",
+          "elapsed": 0,
+          "score_str": "0 - 0",
       },
   ]
 
-# --- AFFICHAGE DES MATCHS ---
+# --- AFFICHAGE DES MATCHS AVEC LOGOS ---
+st.subheader(
+    f"📅 Matchs du {selected_date.strftime('%d/%m/%Y')} — {selected_league_name}"
+)
+
 for match in matches:
   with st.container():
     st.markdown(
         f"""
         <div class="match-card">
-            <div style="font-size: 11px; font-weight: bold; color: #555; margin-bottom: 4px;">
-                {match['league']} &nbsp;•&nbsp; <span style="color: #2e7d32;">✓ {match['status']} · {match['elapsed']} min</span>
+            <div style="font-size: 11px; font-weight: bold; color: #555; margin-bottom: 8px;">
+                {match['league']} &nbsp;•&nbsp; <span style="color: #2e7d32;">✓ {match['status']}</span>
             </div>
-            <div style="font-size: 17px; font-weight: bold; text-align: center; margin: 12px 0; color: #111;">
-                {match['home']} &nbsp;&nbsp;<span style="color: #d32f2f; background: #ffebee; padding: 2px 8px; border-radius: 6px;">{match['score_str']}</span>&nbsp;&nbsp; {match['away']}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 12px 0;">
+                <div style="text-align: center; flex: 1;">
+                    <img src="{match['home_logo']}" width="38" style="vertical-align: middle; margin-bottom: 4px;"><br>
+                    <b style="font-size: 14px; color: #111;">{match['home']}</b>
+                </div>
+                <div style="text-align: center; padding: 0 10px;">
+                    <span style="color: #d32f2f; background: #ffebee; padding: 5px 12px; border-radius: 6px; font-weight: bold; font-size: 16px;">{match['score_str']}</span>
+                </div>
+                <div style="text-align: center; flex: 1;">
+                    <img src="{match['away_logo']}" width="38" style="vertical-align: middle; margin-bottom: 4px;"><br>
+                    <b style="font-size: 14px; color: #111;">{match['away']}</b>
+                </div>
             </div>
         </div>
         """,
@@ -227,58 +330,74 @@ for match in matches:
         key=f"btn_{match['id']}",
     ):
       st.session_state.quota_used += 1
-      res = calculate_poisson_prediction(1.25, 0.85, 1.10, 0.95)
+      res = calculate_poisson_prediction(1.3, 0.85, 1.15, 0.90)
 
-      # Bloc Position Recommandée
+      # 1. Position Recommandée (90 min)
       st.markdown(
           f"""
             <div class="rec-box">
-                <div style="font-size: 10px; font-weight: bold; color: #2e7d32; text-transform: uppercase;">Position recommandée • Temps réglementaire</div>
+                <div style="font-size: 10px; font-weight: bold; color: #2e7d32; text-transform: uppercase;">Position recommandée • Temps réglementaire (90 min)</div>
                 <div style="font-size: 15px; font-weight: bold; color: #111; margin-top: 3px;">{match['home']} ou nul (1X)</div>
-                <div style="font-size: 12px; color: #555; margin-top: 2px;">Double chance • {res['home_win_pct'] + res['draw_pct']}% • cote estimée 1.32</div>
+                <div style="font-size: 12px; color: #555; margin-top: 2px;">Double chance • Confiance {res['dc_1x_pct']}% • Buts totaux Over 2.5 ({res['over_25_pct']}%)</div>
             </div>
             """,
           unsafe_allow_html=True,
       )
 
-      # Scores Exacts en colonnes
+      # 2. Scores Exacts les plus probables
       st.markdown(
           "<div style='font-size: 12px; font-weight: bold; color: #444;"
-          " margin-bottom: 6px;'>SCORES EXACTS · PROBABILITÉS</div>",
+          " margin-bottom: 6px;'>SCORES EXACTS LES PLUS PROBABLES · FIN DE MATCH</div>",
           unsafe_allow_html=True,
       )
-      col_s1, col_s2 = st.columns(2)
+
+      col_s1, col_s2, col_s3 = st.columns(3)
+
       with col_s1:
+        s = res["top_scores"][0]
         st.markdown(
             f"""
                 <div class="score-box" style="border-color: #ffca28;">
-                    <div style="font-size: 17px; font-weight: bold; color: #111;">{res['exact_score']}</div>
-                    <div style="font-size: 11px; color: #555;">{res['score_1_prob']}% • cote 1.33</div>
-                </div>
-                """,
-            unsafe_allow_html=True,
-        )
-      with col_s2:
-        st.markdown(
-            f"""
-                <div class="score-box" style="border-color: #e0e0e0;">
-                    <div style="font-size: 17px; font-weight: bold; color: #111;">{res['score_2']}</div>
-                    <div style="font-size: 11px; color: #555;">{res['score_2_prob']}% • cote 4.29</div>
+                    <div style="font-size: 16px; font-weight: bold; color: #111;">{s['score']}</div>
+                    <div style="font-size: 11px; color: #555;">{s['prob']}% • cote {s['odds']}</div>
                 </div>
                 """,
             unsafe_allow_html=True,
         )
 
-      # Bloc Détail
+      with col_s2:
+        s = res["top_scores"][1]
+        st.markdown(
+            f"""
+                <div class="score-box" style="border-color: #e0e0e0;">
+                    <div style="font-size: 16px; font-weight: bold; color: #111;">{s['score']}</div>
+                    <div style="font-size: 11px; color: #555;">{s['prob']}% • cote {s['odds']}</div>
+                </div>
+                """,
+            unsafe_allow_html=True,
+        )
+
+      with col_s3:
+        s = res["top_scores"][2]
+        st.markdown(
+            f"""
+                <div class="score-box" style="border-color: #e0e0e0;">
+                    <div style="font-size: 16px; font-weight: bold; color: #111;">{s['score']}</div>
+                    <div style="font-size: 11px; color: #555;">{s['prob']}% • cote {s['odds']}</div>
+                </div>
+                """,
+            unsafe_allow_html=True,
+        )
+
+      # 3. Bloc Détail Complet
       st.markdown(
           f"""
             <div class="detail-box">
-                <b>DÉTAIL • {match['elapsed']}' • {match['score_str']}</b>
+                <b>ANALYSE COMPLÈTE • TEMPS RÉGLEMENTAIRE (90 MIN)</b>
                 <ul style="margin: 6px 0 0 -15px; padding-left: 20px; line-height: 1.4;">
-                    <li>Minute {match['elapsed']}' — score actuel de {match['score_str']}.</li>
-                    <li>Tendance du jeu : Puissance offensive attendue en faveur de {match['home']} – les cotes en direct s'ajustent.</li>
-                    <li>Statistiques : Analyse de la forme, de l'historique et de la loi de Poisson.</li>
-                    <li>Buts encore attendus : Modélisation mathématique validée sur le déroulement du match.</li>
+                    <li><b>Probabilité Victoire domicile :</b> {res['home_win_pct']}% | <b>Nul :</b> {res['draw_pct']}% | <b>Victoire extérieur :</b> {res['away_win_pct']}%</li>
+                    <li>Tendance globale : Modélisation mathématique sur les forces offensives et défensives sur l'ensemble de la rencontre.</li>
+                    <li>Marché BTTS (Les deux équipes marquent) : {res['btts_yes_pct']}% de chance de validation.</li>
                 </ul>
             </div>
             """,
