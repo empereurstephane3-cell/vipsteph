@@ -74,9 +74,7 @@ if auto_refresh:
   st.sidebar.info("Actualisation automatique active.")
 
 # 1. Sélection de la date
-selected_date = st.sidebar.date_input(
-    "Date des matchs", datetime.today()
-)
+selected_date = st.sidebar.date_input("Date des matchs", datetime.today())
 date_str = selected_date.strftime("%Y-%m-%d")
 
 
@@ -201,7 +199,7 @@ def calculate_poisson_prediction(
 # --- RÉCUPÉRATION DES MATCHS ET LOGOS ---
 def fetch_fixtures(api_key, date_s, league_id=None):
   if not api_key:
-    return None
+    return []
   url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
   params = {"date": date_s}
   if league_id:
@@ -250,24 +248,26 @@ def fetch_fixtures(api_key, date_s, league_id=None):
             "elapsed": fix.get("status", {}).get("elapsed", 0) or 0,
             "score_str": score_str,
         })
-      return matches if matches else None
+      return matches
   except Exception:
     pass
-  return None
+  return []
 
 
+# Chargement sécurisé des matchs
 matches = fetch_fixtures(api_key_ft, date_str, selected_league_id)
 
 if not api_key_ft:
   st.warning(
       "⚠️ Veuillez entrer votre **Clé API Football (RapidAPI)** dans la barre"
-      " latérale pour charger les vrais matchs avec logos et scores en"
-      " direct."
+      " latérale pour charger les vrais matchs."
   )
-elif not matches:
+
+# Si la liste est vide (pas de clé ou aucun match ce jour-là), on met des exemples par défaut
+if not matches:
   st.info(
-      f"Aucun match trouvé pour la date du **{date_str}** dans ce championnat."
-      " Voici des exemples de démonstration :"
+      f"Aucun match trouvé pour la date du **{date_str}**. Voici des exemples"
+      " de démonstration :"
   )
   matches = [
       {
