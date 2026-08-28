@@ -113,7 +113,7 @@ def fetch_leagues_by_country(api_key, country_name):
             "X-RapidAPI-Key": api_key,
             "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
         },
-        params={"country": country_name, "season": "2026"},
+        params={"country": country_name},
         timeout=5,
     )
     if res.status_code == 200:
@@ -199,12 +199,11 @@ def calculate_poisson_prediction(
 # --- RÉCUPÉRATION DES MATCHS ET LOGOS ---
 def fetch_fixtures(api_key, date_s, league_id=None):
   if not api_key:
-    return []
+    return [], "Pas de clé API"
   url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
   params = {"date": date_s}
   if league_id:
     params["league"] = league_id
-    params["season"] = "2026"
 
   try:
     res = requests.get(
@@ -217,9 +216,10 @@ def fetch_fixtures(api_key, date_s, league_id=None):
         timeout=10,
     )
     if res.status_code == 200:
-      items = res.json().get("response", [])
+      data = res.json()
+      items = data.get("response", [])
       matches = []
-      for item in items[:10]:
+      for item in items:
         fix = item.get("fixture", {})
         teams = item.get("teams", {})
         league = item.get("league", {})
@@ -248,26 +248,29 @@ def fetch_fixtures(api_key, date_s, league_id=None):
             "elapsed": fix.get("status", {}).get("elapsed", 0) or 0,
             "score_str": score_str,
         })
-      return matches
-  except Exception:
-    pass
-  return []
+      return matches, None
+    else:
+      return [], f"Erreur HTTP {res.status_code}: {res.text}"
+  except Exception as e:
+    return [], str(e)
 
 
-# Chargement sécurisé des matchs
-matches = fetch_fixtures(api_key_ft, date_str, selected_league_id)
+# Chargement des matchs avec récupération d'un éventuel message d'erreur
+matches, api_error = fetch_fixtures(api_key_ft, date_str, selected_league_id)
 
 if not api_key_ft:
   st.warning(
       "⚠️ Veuillez entrer votre **Clé API Football (RapidAPI)** dans la barre"
-      " latérale pour charger les vrais matchs."
+      " latérale."
   )
+elif api_error:
+  st.error(f"Erreur API : {api_error}")
 
-# Si la liste est vide (pas de clé ou aucun match ce jour-là), on met des exemples par défaut
+# Si la liste est vide, on affiche les démos
 if not matches:
   st.info(
-      f"Aucun match trouvé pour la date du **{date_str}**. Voici des exemples"
-      " de démonstration :"
+      f"Aucun match trouvé pour la date du **{date_str}** dans ce championnat."
+      " (Affichage des exemples de démonstration ci-dessous) :"
   )
   matches = [
       {
