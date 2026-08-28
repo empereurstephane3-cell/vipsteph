@@ -60,7 +60,7 @@ st.title("👑 VIPSteph - Pronos Avancés")
 # --- BARRE LATÉRALE : CONFIGURATION, FILTRES & AUTO-REFRESH ---
 st.sidebar.header("⚙️ Configuration & Filtres")
 api_key_ft = st.sidebar.text_input(
-    "Clé API Football (RapidAPI)", type="password"
+    "Clé API (apiv3.apifootball.com)", type="password"
 )
 
 # Option d'actualisation automatique
@@ -78,59 +78,57 @@ selected_date = st.sidebar.date_input("Date des matchs", datetime.today())
 date_str = selected_date.strftime("%Y-%m-%d")
 
 
-# Fonctions API dynamiques
+# --- FONCTIONS API (apiv3.apifootball.com) ---
 @st.cache_data(ttl=3600)
 def fetch_countries(api_key):
   if not api_key:
-    return ["France", "England", "Spain", "Italy", "Germany"]
-  url = "https://api-football-v1.p.rapidapi.com/v3/countries"
+    return {}
+  url = f"https://apiv3.apifootball.com/?action=get_countries&APIkey={api_key}"
   try:
-    res = requests.get(
-        url,
-        headers={
-            "X-RapidAPI-Key": api_key,
-            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
-        },
-        timeout=5,
-    )
+    res = requests.get(url, timeout=5)
     if res.status_code == 200:
-      data = res.json().get("response", [])
-      return sorted([c["name"] for c in data])
-  except Exception:
-    pass
-  return ["France", "England", "Spain", "Italy", "Germany"]
-
-
-@st.cache_data(ttl=3600)
-def fetch_leagues_by_country(api_key, country_name):
-  if not api_key:
-    return {"Ligue 1": 61, "Premier League": 39}
-  url = "https://api-football-v1.p.rapidapi.com/v3/leagues"
-  try:
-    res = requests.get(
-        url,
-        headers={
-            "X-RapidAPI-Key": api_key,
-            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
-        },
-        params={"country": country_name},
-        timeout=5,
-    )
-    if res.status_code == 200:
-      data = res.json().get("response", [])
-      leagues = {
-          item["league"]["name"]: item["league"]["id"] for item in data
-      }
-      return leagues
+      data = res.json()
+      if isinstance(data, list):
+        # Dictionnaire { nom_pays: id_pays }
+        return {
+            c["country_name"]: c["country_id"]
+            for c in data
+            if "country_name" in c
+        }
   except Exception:
     pass
   return {}
 
 
-countries_list = fetch_countries(api_key_ft)
-selected_country = st.sidebar.selectbox("Pays", countries_list)
+@st.cache_data(ttl=3600)
+def fetch_leagues(api_key, country_id):
+  if not api_key or not country_id:
+    return {}
+  url = f"https://apiv3.apifootball.com/?action=get_leagues&country_id={country_id}&APIkey={api_key}"
+  try:
+    res = requests.get(url, timeout=5)
+    if res.status_code == 200:
+      data = res.json()
+      if isinstance(data, list):
+        return {
+            l["league_name"]: l["league_id"] for l in data if "league_name" in l
+        }
+  except Exception:
+    pass
+  return {}
 
-leagues_dict = fetch_leagues_by_country(api_key_ft, selected_country)
+
+countries_dict = fetch_countries(api_key_ft)
+if countries_dict:
+  selected_country_name = st.sidebar.selectbox(
+      "Pays", list(countries_dict.keys())
+  )
+  selected_country_id = countries_dict[selected_country_name]
+else:
+  selected_country_name = "France"
+  selected_country_id = "3"
+
+leagues_dict = fetch_leagues(api_key_ft, selected_country_id)
 if leagues_dict:
   selected_league_name = st.sidebar.selectbox(
       "Championnat", list(leagues_dict.keys())
@@ -140,7 +138,7 @@ else:
   selected_league_name = "Tous les championnats"
   selected_league_id = None
 
-st.sidebar.markdown(f"**Quotas consommés :** {st.session_state.quota_used} / 100")
+st.sidebar.markdown(f"**Quotas consommés :** {st.session_state.quota_used}")
 
 
 # --- MOTEUR DE CALCUL POISSON (TEMPS RÉGLEMENTAIRE 90 MIN) ---
@@ -196,77 +194,67 @@ def calculate_poisson_prediction(
   }
 
 
-# --- RÉCUPÉRATION DES MATCHS ET LOGOS ---
+# --- RÉCUPÉRATION DES MATCHS (apiv3.apifootball.com) ---
 def fetch_fixtures(api_key, date_s, league_id=None):
   if not api_key:
     return [], "Pas de clé API"
-  url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-  params = {"date": date_s}
+  url = f"https://apiv3.apifootball.com/?action=get_fixtures&from={date_s}&to={date_s}&APIkey={api_key}"
   if league_id:
-    params["league"] = league_id
+    url += f"&league_id={league_id}"
 
   try:
-    res = requests.get(
-        url,
-        headers={
-            "X-RapidAPI-Key": api_key,
-            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com",
-        },
-        params=params,
-        timeout=10,
-    )
+    res = requests.get(url, timeout=10)
     if res.status_code == 200:
       data = res.json()
-      items = data.get("response", [])
-      matches = []
-      for item in items:
-        fix = item.get("fixture", {})
-        teams = item.get("teams", {})
-        league = item.get("league", {})
-        goals = item.get("goals", {})
+      if isinstance(data, dict) and "error" in data:
+        return [], data["error"]
+      if isinstance(data, list):
+        matches = []
+        for item in data[:10]:
+          h_goals = item.get("match_hometeam_score")
+          a_goals = item.get("match_awayteam_score")
+          score_str = (
+              f"{h_goals} - {a_goals}"
+              if h_goals is not None
+              and a_goals is not None
+              and h_goals != ""
+              and a_goals != ""
+              else "0 - 0"
+          )
 
-        h_goals = goals.get("home")
-        a_goals = goals.get("away")
-        score_str = (
-            f"{h_goals} - {a_goals}"
-            if h_goals is not None and a_goals is not None
-            else "0 - 0"
-        )
-
-        matches.append({
-            "id": fix.get("id", 0),
-            "home": teams.get("home", {}).get("name", "Domicile"),
-            "away": teams.get("away", {}).get("name", "Extérieur"),
-            "home_logo": teams.get("home", {}).get(
-                "logo", "https://media.api-sports.io/football/teams/default.png"
-            ),
-            "away_logo": teams.get("away", {}).get(
-                "logo", "https://media.api-sports.io/football/teams/default.png"
-            ),
-            "league": league.get("name", "Championnat").upper(),
-            "status": fix.get("status", {}).get("short", "NS"),
-            "elapsed": fix.get("status", {}).get("elapsed", 0) or 0,
-            "score_str": score_str,
-        })
-      return matches, None
-    else:
-      return [], f"Erreur HTTP {res.status_code}: {res.text}"
+          matches.append({
+              "id": item.get("match_id", 0),
+              "home": item.get("match_hometeam_name", "Domicile"),
+              "away": item.get("match_awayteam_name", "Extérieur"),
+              "home_logo": item.get(
+                  "team_home_badge",
+                  "https://apiv3.apifootball.com/badges/logo_country/default.png",
+              ),
+              "away_logo": item.get(
+                  "team_away_badge",
+                  "https://apiv3.apifootball.com/badges/logo_country/default.png",
+              ),
+              "league": item.get("league_name", "Championnat").upper(),
+              "status": item.get("match_status", "NS"),
+              "score_str": score_str,
+          })
+        return matches, None
+    return [], f"Erreur HTTP {res.status_code}"
   except Exception as e:
     return [], str(e)
 
 
-# Chargement des matchs avec récupération d'un éventuel message d'erreur
 matches, api_error = fetch_fixtures(api_key_ft, date_str, selected_league_id)
 
 if not api_key_ft:
   st.warning(
-      "⚠️ Veuillez entrer votre **Clé API Football (RapidAPI)** dans la barre"
-      " latérale."
+      "⚠️ Veuillez entrer votre **Clé API (apiv3.apifootball.com)** dans la"
+      " barre latérale."
   )
 elif api_error:
   st.error(f"Erreur API : {api_error}")
 
-# Si la liste est vide, on affiche les démos
+# Fallback de démonstration si aucun match ou absence de clé
 if not matches:
   st.info(
       f"Aucun match trouvé pour la date du **{date_str}** dans ce championnat."
@@ -277,22 +265,24 @@ if not matches:
           "id": 501,
           "home": "Real Madrid",
           "away": "FC Barcelone",
-          "home_logo": "https://media.api-sports.io/football/teams/541.png",
-          "away_logo": "https://media.api-sports.io/football/teams/529.png",
+          "home_logo": (
+              "https://apiv3.apifootball.com/badges/3002_real-madrid.png"
+          ),
+          "away_logo": "https://apiv3.apifootball.com/badges/3001_fc-barcelona.png",
           "league": selected_league_name.upper(),
           "status": "NS",
-          "elapsed": 0,
           "score_str": "0 - 0",
       },
       {
           "id": 502,
           "home": "Arsenal",
           "away": "Manchester City",
-          "home_logo": "https://media.api-sports.io/football/teams/42.png",
-          "away_logo": "https://media.api-sports.io/football/teams/50.png",
+          "home_logo": "https://apiv3.apifootball.com/badges/8643_arsenal.png",
+          "away_logo": (
+              "https://apiv3.apifootball.com/badges/8645_manchester-city.png"
+          ),
           "league": selected_league_name.upper(),
           "status": "NS",
-          "elapsed": 0,
           "score_str": "0 - 0",
       },
   ]
@@ -335,7 +325,6 @@ for match in matches:
       st.session_state.quota_used += 1
       res = calculate_poisson_prediction(1.3, 0.85, 1.15, 0.90)
 
-      # 1. Position Recommandée (90 min)
       st.markdown(
           f"""
             <div class="rec-box">
@@ -347,7 +336,6 @@ for match in matches:
           unsafe_allow_html=True,
       )
 
-      # 2. Scores Exacts les plus probables
       st.markdown(
           "<div style='font-size: 12px; font-weight: bold; color: #444;"
           " margin-bottom: 6px;'>SCORES EXACTS LES PLUS PROBABLES · FIN DE MATCH</div>",
@@ -392,7 +380,6 @@ for match in matches:
             unsafe_allow_html=True,
         )
 
-      # 3. Bloc Détail Complet
       st.markdown(
           f"""
             <div class="detail-box">
